@@ -1,0 +1,52 @@
+#Asla gitmeyecekler (.env.example takipte)
+.env
+.env.*
+!.env.ornek
+*.pem
+*.key
+id_rsa*
+local.settings.json
+.azure/
+*.publishsettings
+
+# Python ortamı ve araç çıktıları
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+build/
+dist/
+*.egg
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Ham veri, model ve deney takibi (veri/ klasörü git'e girmez)
+veri/
+*.parquet
+*.duckdb
+mlruns/
+mlartifacts/
+*.pkl
+*.joblib
+*.onnx
+
+# Altyapı durum dosyaları (Bicep/Terraform plan ve state)
+*.tfstate
+*.tfstate.*
+.terraform/
+terraform.tfvars
+*.tfplan
+
+# Editör ve işletim sistemi
+.cursor/
+.cursorrules
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+.ipynb_checkpoints/
