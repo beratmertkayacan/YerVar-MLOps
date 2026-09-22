@@ -1,88 +1,67 @@
+"""Ham API yanıtlarını DEĞİŞTİRMEDEN saklar.
+
+Kurallar:
+1. Gelen yanıta dokunulmaz. Temizleme ve dönüştürme sonraki katmanın işi.
+   Şemayı yanlış anladığımızı sonradan fark edersek, ham veri sayesinde
+   geçmişi baştan işleyebiliriz.
+2. Her tur ayrı bir dosyaya yazılır; dosya adı UTC zaman damgalıdır.
+3. Dosyalar gzip ile sıkıştırılır. Ölçülen: tek bir liste yanıtı ~56 KB,
+   sıkıştırınca ~8 KB. Günde 288 turla aylık ~480 MB yerine ~70 MB.
+
+Hafta 2'de aynı yaz() metoduna sahip bir BlobDepo yazacağız; toplayıcının
+kodu değişmeyecek, sadece ona verilen depo nesnesi değişecek.
 """
-Ham API yanıtları doğrudan saklanır (2 kural)
 
-1- Doğrudan yazılır: ad düzeltme, tip dönüşümü, filtreleme yok. Ayrıştırma L1'in temizleme adımı işi
-Şemanın yanlış anlaşıldığı 3 ay sonra çıkarsa, ham veri duruyorsa geçmişi baştan işleriz.
-Dokunulursa veri gelmez!
-
-2- Her tür kendi dosyasına yazılsın, adı UTC zamanı damgalı şekilde
-
-Depoalama arayüzü(Hamdepo) soyut bu adımda. Diskten sonra Azure Blob vs yazılacak, toplayıcı kodu değişmeden
-sadece kendisine verilen depo nesnesi değiştirilecek
-"""
-from __future__ import annotations
-
+import gzip
 import json
 import os
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Protocol
-
-
-class HamDepo(Protocol):
-    """Ham yanıtları saklayan deponun kuralları"""
-
-    def yaz(self, goreli_yol: str, icerik: Any) -> str:
-        """İçeri verilen yola JSON olarak yaz, nihai konuma döndür"""
-        ...
+from typing import Any
 
 
 def simdi_utc() -> datetime:
-    """Şuanki zamanı UTC döndür 
-    Proje boyunca tek zaman kaynağı bu, yerel saat, yaz saati vs veri onarımı gerekebilir bozar.
-    Diske yazılan her şey UTC 
+    """Şu anki zamanı UTC olarak döndürür.
+
+    Projedeki tek zaman kaynağı budur. Yerel saatle kayıt yapılırsa yaz saati
+    geçişinde bir saat ya tekrarlanır ya kaybolur ve bu veri onarılamaz.
     """
     return datetime.now(UTC)
 
 
-def zaman_damgasi(zaman: datetime) -> str:
-    """Dosya adında kullanılacak sıkıştırılmış UTC damgası: 20260917T143000Z"""
-    return zaman.strftime("%Y%m%dT%H%M%SZ")
-
-
 def ham_yol(zaman: datetime, etiket: str) -> str:
-    """Bir türün yazılacağı göreli yolu üretir
+    """Bir turun göreli dosya yolu: 2026/09/17/14/parklar_20260917T143000Z.json.gz
 
-    Örnek: 2026/09/17/14/parklar_20260917T143000Z.json
-
-    Klasörlerin yıl/ay/gün/saat olarak bölünmesi bilerek: dosya sistemi ve bölümlü okuma mimarisi
-    yavaşlayabilir diğer türlü.
-    Saat bazlı bölümleme işi ucuzlatır ve planlı yapar
+    Saat bazlı klasörler, tek bir klasörde on binlerce dosya birikmesini önler
+    ve "sadece dünü oku" gibi sorguları ucuzlatır.
     """
-    return (
-        f"{zaman:%Y}/{zaman:%m}/{zaman:%d}/{zaman:%H}/"
-        f"{etiket}_{zaman_damgasi(zaman)}.json"
-    )
+    return f"{zaman:%Y/%m/%d/%H}/{etiket}_{zaman:%Y%m%dT%H%M%SZ}.json.gz"
 
 
 class YerelDepo:
-    """Ham yanıtları yerel diske yazar (aşama1)"""
+    """Ham yanıtları yerel diske yazar."""
 
     def __init__(self, kok: Path) -> None:
         self.kok = kok
 
-    def yaz(self, goreli_yol: str, icerik: Any) -> str:
-        """İçeriği diske yaz, tüm yolu döndür
-        Önce geçici dosyaya yaz, nihai ada taşı.
-        Yazma sürcinde kill olursa .json değil .tmp kalır okuyunca bozuk dosya görülmez
+    def yaz(self, goreli_yol: str, icerik: Any) -> Path:
+        """İçeriği sıkıştırıp atomik olarak yazar.
+
+        Atomik yazma: önce .tmp dosyasına yazılır, sonra tek adımda asıl adına
+        taşınır. Yazma sırasında süreç kesilirse geride yarım bir dosya kalmaz.
         """
         hedef = self.kok / goreli_yol
         hedef.parent.mkdir(parents=True, exist_ok=True)
 
-        gecici = hedef.with_suffix(hedef.suffix + ".tmp")
-        metin = json.dumps(icerik, ensure_ascii=False, separators=(",", ":"))
-        gecici.write_text(metin, encoding="utf-8")
+        gecici = hedef.with_name(hedef.name + ".tmp")
+        with gzip.open(gecici, "wt", encoding="utf-8") as dosya:
+            json.dump(icerik, dosya, ensure_ascii=False)
         os.replace(gecici, hedef)
 
-        return str(hedef)
+        return hedef
 
 
-class BellekDepo:
-    """Testler için diske yazmayan örnek depo"""
-
-    def __init__(self) -> None:
-        self.kayitlar: dict[str, Any] = {}
-
-    def yaz(self, goreli_yol: str, icerik: Any) -> str:
-        self.kayitlar[goreli_yol] = icerik
-        return goreli_yol
+def oku(yol: Path) -> Any:
+    """Sıkıştırılmış bir ham dosyayı okur."""
+    with gzip.open(yol, "rt", encoding="utf-8") as dosya:
+        return json.load(dosya)
