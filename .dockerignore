@@ -1,0 +1,13 @@
+# İmaja girmemesi gerekenler: boyutu büyütür, sır sızdırabilir veya gereksizdir
+.git
+.venv
+veri
+kesif
+testler
+belgeler
+.env
+.env.*
+AGENTS.md
+**/__pycache__
+.pytest_cache
+.ruff_cache
