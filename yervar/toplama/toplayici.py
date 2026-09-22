@@ -19,7 +19,7 @@ from yervar.depolama.ham import YerelDepo, ham_yol, simdi_utc
 from yervar.gunluk import gunluk_al
 from yervar.toplama.istemci import istemci_olustur, park_listesi_getir
 
-gunluk = gunluk_al(__name__)
+gunluk = gunluk_al("yervar.toplama.toplayici")
 _calisiyor = True
 
 
