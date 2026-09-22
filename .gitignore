@@ -45,6 +45,7 @@ terraform.tfvars
 # Editör ve işletim sistemi
 .cursor/
 .cursorrules
+AGENTS.md
 .vscode/
 .idea/
 .DS_Store
