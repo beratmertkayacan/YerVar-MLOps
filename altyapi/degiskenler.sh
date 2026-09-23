@@ -19,3 +19,12 @@ export IS=job-yervar-toplayici      # zamanlanmış iş
 
 export SURUM=0.2
 export IMAJ=$KAYIT.azurecr.io/yervar-toplayici:$SURUM
+
+# --- Python uygulamasının okuduğu isimler ---
+# Yukarıdaki kısa adlar az komutları için. Uygulama ise .env'deki adları okuyor.
+# Aynı değeri iki isimle taşımak yerine burada eşliyoruz: tek doğru kaynak kalıyor.
+export AZURE_DEPOLAMA_HESABI=$DEPOLAMA
+export AZURE_KAP=$KAP
+# DEPO_TURU bilerek ayarlanmıyor: varsayılan "yerel" kalsın, buluta yazmak
+# istediğinde komutun başına DEPO_TURU=blob yazarsın. Böylece yanlışlıkla
+# buluta yazmak mümkün olmuyor.
