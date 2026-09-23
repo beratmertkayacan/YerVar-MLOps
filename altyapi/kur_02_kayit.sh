@@ -20,9 +20,12 @@ echo "▶ Docker, kayıt defterine bağlanıyor"
 az acr login -n "$KAYIT"
 
 # --platform linux/amd64 ZORUNLU: Mac arm64 üretir, Azure amd64 çalıştırır.
-# Bu bayrak olmadan imaj yüklenir ama iş "exec format error" ile çöker.
+#   Bu bayrak olmadan imaj yüklenir ama iş "exec format error" ile çöker.
+# --provenance=false: buildx varsayılan olarak imajın yanına bir "attestation"
+#   katmanı ekleyip çok mimarili bir manifest listesi üretiyor. Bazı çalışma
+#   ortamları bu listeyi çözemiyor. Tek mimarili sade bir imaj daha güvenli.
 echo "▶ İmaj derleniyor ve gönderiliyor: $IMAJ"
-docker buildx build --platform linux/amd64 -t "$IMAJ" --push .
+docker buildx build --platform linux/amd64 --provenance=false -t "$IMAJ" --push .
 
 echo
 echo "✓ Kayıt defterindeki etiketler:"
