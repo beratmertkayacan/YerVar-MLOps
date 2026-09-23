@@ -15,7 +15,7 @@ import time
 import httpx
 
 from yervar import ayarlar
-from yervar.depolama.ham import YerelDepo, ham_yol, simdi_utc
+from yervar.depolama.ham import BlobDepo, YerelDepo, depo_olustur, ham_yol, simdi_utc
 from yervar.gunluk import gunluk_al
 from yervar.toplama.istemci import istemci_olustur, park_listesi_getir
 
@@ -30,15 +30,16 @@ def _durdur(sinyal: int, _cerceve: object) -> None:
     gunluk.info("durdurma sinyali alındı (%d), tur bitince çıkılacak", sinyal)
 
 
-def tek_tur(istemci: httpx.Client, depo: YerelDepo) -> None:
+def tek_tur(istemci: httpx.Client, depo: YerelDepo | BlobDepo) -> None:
     """Listeyi bir kez çeker ve kaydeder."""
     zaman = simdi_utc()
     parklar = park_listesi_getir(istemci)
-    yol = depo.yaz(ham_yol(zaman, "parklar"), parklar)
-    gunluk.info("%d otopark kaydedildi → %s", len(parklar), yol.name)
+    yol = ham_yol(zaman, "parklar")
+    depo.yaz(yol, parklar)
+    gunluk.info("%d otopark kaydedildi → %s", len(parklar), yol)
 
 
-def surekli_calis(istemci: httpx.Client, depo: YerelDepo) -> None:
+def surekli_calis(istemci: httpx.Client, depo: YerelDepo | BlobDepo) -> None:
     """Turları durdurulana kadar sabit aralıkla tekrarlar.
 
     Toplayıcı hata yüzünden asla durmaz: kaynakta geçmiş arşiv olmadığı için
@@ -67,13 +68,13 @@ def main() -> None:
     ayristirici.add_argument("--tek-tur", action="store_true", help="bir tur çalış ve çık")
     tek = ayristirici.parse_args().tek_tur
 
-    depo = YerelDepo(ayarlar.HAM_KOK)
+    depo = depo_olustur()
     with istemci_olustur() as istemci:
         if tek:
             tek_tur(istemci, depo)
         else:
-            aralik, hedef = ayarlar.TOPLAMA_ARALIGI_SN, ayarlar.HAM_KOK
-            gunluk.info("toplayıcı başladı: her %d sn → %s", aralik, hedef)
+            aralik, tur = ayarlar.TOPLAMA_ARALIGI_SN, ayarlar.DEPO_TURU
+            gunluk.info("toplayıcı başladı: her %d sn → %s depo", aralik, tur)
             surekli_calis(istemci, depo)
 
 

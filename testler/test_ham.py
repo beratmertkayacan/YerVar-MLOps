@@ -34,3 +34,23 @@ def test_turkce_karakterler_korunur(tmp_path: Path) -> None:
     with gzip.open(yol, "rt", encoding="utf-8") as dosya:
         metin = dosya.read()
     assert "ÜMRANİYE" in metin and "\\u" not in metin
+
+
+def test_varsayilan_depo_yereldir(monkeypatch) -> None:
+    from yervar import ayarlar
+    from yervar.depolama.ham import depo_olustur
+
+    monkeypatch.setattr(ayarlar, "DEPO_TURU", "yerel")
+    assert isinstance(depo_olustur(), YerelDepo)
+
+
+def test_blob_icin_hesap_adi_zorunlu(monkeypatch) -> None:
+    import pytest
+
+    from yervar import ayarlar
+    from yervar.depolama.ham import depo_olustur
+
+    monkeypatch.setattr(ayarlar, "DEPO_TURU", "blob")
+    monkeypatch.setattr(ayarlar, "AZURE_DEPOLAMA_HESABI", "")
+    with pytest.raises(ValueError):
+        depo_olustur()
