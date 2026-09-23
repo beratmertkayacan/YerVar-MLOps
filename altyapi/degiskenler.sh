@@ -13,7 +13,7 @@ export SONEK=bmk01                  # küresel olarak benzersiz olması gereken 
 export DEPOLAMA=styervar$SONEK      # depolama hesabı (3-24 karakter, küçük harf ve rakam)
 export KAP=ham                      # blob kabı
 export KAYIT=acryervar$SONEK        # konteyner kayıt defteri
-export KIMLIK=id-yervar             # yönetilen kimlik
+export KIMLIK_ACR=id-yervar-acr    # imaj çekme kimliği (sadece AcrPull)
 export ORTAM=cae-yervar             # Container Apps ortamı
 export IS=job-yervar-toplayici      # zamanlanmış iş
 
