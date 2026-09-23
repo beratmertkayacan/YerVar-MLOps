@@ -1,0 +1,4 @@
+# Geliştirme araçları — imaja girmez
+-r gereksinimler.txt
+pytest>=8.0
+ruff>=0.5
