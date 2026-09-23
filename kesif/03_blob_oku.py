@@ -12,11 +12,18 @@ Bu script en son blob'u indirir, açar ve tablo halinde yazar.
 import argparse
 import gzip
 import json
+import sys
+from pathlib import Path
 
-from azure.identity import DefaultAzureCredential
-from azure.storage.blob import ContainerClient
+# Bu script "python kesif/03_blob_oku.py" ile çalıştırıldığında Python, arama
+# yoluna scriptin bulunduğu kesif/ klasörünü koyar — proje kökünü değil. O yüzden
+# "import yervar" başarısız olur. Proje kökünü arama yoluna elle ekliyoruz.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from yervar import ayarlar
+from azure.identity import DefaultAzureCredential  # noqa: E402
+from azure.storage.blob import ContainerClient  # noqa: E402
+
+from yervar import ayarlar  # noqa: E402
 
 
 def kap_baglan() -> ContainerClient:
