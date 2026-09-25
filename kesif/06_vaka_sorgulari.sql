@@ -1,15 +1,12 @@
 -- Gerçek verideki case'leri bulan sorgular.
 -- Bulunan her vaka belgeler/veri-bulgulari.md dosyasına kanıtıyla yazıldı.
 
--- Çalıştırma (proje kökünden):  duckdb  ->  .read kesif/06_vaka_avi.sql
--- Bulut verisi için 05_sorgular.sql'deki B bloğunu (SECRET + az:// görünümleri) buradaki A bloğunun yerine kullanılabilir
-
---  A) Yerel veri 
-CREATE OR REPLACE VIEW doluluk AS
-    SELECT * FROM read_parquet('veri/tablo/doluluk/**/*.parquet', hive_partitioning = true);
-CREATE OR REPLACE VIEW otoparklar AS
-    SELECT * FROM 'veri/tablo/otoparklar/otoparklar.parquet';
-
+-- Çalıştırma (proje kökünden, iki adım):
+--     duckdb
+--     .read kesif/00_baglan_yerel.sql ya da 00_baglan_bulut.sql
+--     .read kesif/06_vaka_sorgulari.sql
+-- İlk dosya veriyi nereden okuyacağını, bu dosya ne soracağını belirliyor.
+-- Aynı sorgular yerel veride de bulutta da değiştirilmeden çalışır.
 
 -- V-001 / V-002: Donuk otoparklar, türe göre.
 -- "hep_dolu": boş yer hiç değişmeden 0. Uygulamada "yer yok" diye görünür ama aslında sensör yok. "ara_sabit": 0 olmayan bir sayıda takılı kalmış.

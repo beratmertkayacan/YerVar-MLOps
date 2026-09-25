@@ -1,33 +1,11 @@
 -- Yervar L1 tablolarını DuckDB ile sorgulamak için örnekler.
 --
--- Çalıştırma (proje kökünden):
---     duckdb                      -> etkileşimli kabuk açılır
---     .read kesif/05_sorgular.sql -> bu dosyadaki her şeyi çalıştırır
---
--- Veriyi nereden okuyacağını aşağıdaki iki görünümden (VIEW) biri belirliyor.
--- Görünüm, kaydedilmiş bir sorgudur: veri kopyalanmaz, her seferinde kaynaktan okunur.
-
-
---A) Yerel veri: veri/tablo/ altından oku 
-CREATE OR REPLACE VIEW doluluk AS
-    SELECT * FROM read_parquet('veri/tablo/doluluk/**/*.parquet', hive_partitioning = true);
-CREATE OR REPLACE VIEW otoparklar AS
-    SELECT * FROM 'veri/tablo/otoparklar/otoparklar.parquet';
-
-
---B) Bulut verisi: Azure'daki "tablo" kabından oku 
--- Önce terminalde `az login` yapılmış olmalı. Parola ya da anahtar yok:
--- DuckDB, az CLI oturumunu kullanıyor (CHAIN 'cli'). A'yı kullanmak için
--- aşağıdaki satırların başına -- koy, B'yi kullanmak için baştaki --'ları kaldır.
---
--- CREATE OR REPLACE SECRET yervar (
---     TYPE azure, PROVIDER credential_chain, CHAIN 'cli', ACCOUNT_NAME 'styervarbmk01'
--- );
--- CREATE OR REPLACE VIEW doluluk AS
---     SELECT * FROM read_parquet('az://tablo/doluluk/**/*.parquet', hive_partitioning = true);
--- CREATE OR REPLACE VIEW otoparklar AS
---     SELECT * FROM 'az://tablo/otoparklar/otoparklar.parquet';
-
+-- Çalıştırma (proje kökünden, iki adım):
+--     duckdb
+--     .read kesif/00_baglan_yerel.sql ya da 00_baglan_bulut.sql
+--     .read kesif/05_sorgular.sql
+-- İlk dosya veriyi nereden okuyacağını, bu dosya ne soracağını belirliyor.
+-- Aynı sorgular yerel veride de bulutta da değiştirilmeden çalışır.
 
 -- 1. Tabloda neler var? Sütun adları ve tipleri.
 DESCRIBE doluluk;
