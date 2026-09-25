@@ -32,10 +32,10 @@ DEPO_TURU = os.getenv("DEPO_TURU", "yerel")
 VERI_KOK = PROJE_KOKU / os.getenv("VERI_KOK", "veri")
 HAM_KOK = VERI_KOK / "ham"
 
-# Azure Blob depo — parola yok; kimlik, bulutta yönetilen kimlikten (managed
-# identity), yerelde `az login` oturumundan otomatik alınır.
+# Azure Blob depo — parola yok; kimlik, bulutta yönetilen kimlikten (managed identity), yerelde `az login` oturumundan otomatik alınır.
 AZURE_DEPOLAMA_HESABI = os.getenv("AZURE_DEPOLAMA_HESABI", "")
-AZURE_KAP = os.getenv("AZURE_KAP", "ham")
+AZURE_KAP = os.getenv("AZURE_KAP", "ham")        # ham turlar (L0 yazar)
+TABLO_KAP = os.getenv("TABLO_KAP", "tablo")      # günlük tablolar (L1 yazar)
 
 # Günlük
 LOG_SEVIYESI = os.getenv("LOG_SEVIYESI", "INFO").upper()

@@ -8,9 +8,10 @@ Kurallar:
 3. Dosyalar gzip ile sıkıştırılır. Ölçülen: tek bir liste yanıtı ~56 KB,
    sıkıştırınca ~8 KB. Günde 288 turla aylık ~480 MB yerine ~70 MB.
 
-İki depo var ve ikisinin de aynı yaz() metodu var: YerelDepo diske,
-BlobDepo Azure'a yazar. Toplayıcı hangisiyle konuştuğunu bilmez;
-depo_olustur() ayara bakıp doğru olanı verir.
+İki depo var ve ikisi de aynı dört metoda sahip (yaz, yaz_bayt, listele,
+oku_bayt): YerelDepo diske, BlobDepo Azure'a yazar. Kodun geri kalanı hangisiyle
+konuştuğunu bilmez; depo_olustur() ayara bakıp doğru olanı verir. L1 (tablo.py)
+aynı sınıfları hem ham veriyi okumak hem tabloyu yazmak için kullanıyor.
 """
 
 import gzip
@@ -47,13 +48,17 @@ def _sikistir(icerik: Any) -> bytes:
 
 
 class YerelDepo:
-    """Ham yanıtları yerel diske yazar (geliştirme ortamı)."""
+    """Dosyaları yerel diske yazar ve okur (geliştirme ortamı)."""
 
     def __init__(self, kok: Path) -> None:
         self.kok = kok
 
     def yaz(self, goreli_yol: str, icerik: Any) -> str:
-        """İçeriği sıkıştırıp atomik olarak yazar.
+        """İçeriği JSON'a çevirip sıkıştırarak yazar."""
+        return self.yaz_bayt(goreli_yol, _sikistir(icerik))
+
+    def yaz_bayt(self, goreli_yol: str, veri: bytes) -> str:
+        """Hazır baytları atomik olarak yazar.
 
         Atomik yazma: önce .tmp dosyasına yazılır, sonra tek adımda asıl adına
         taşınır. Yazma sırasında süreç kesilirse geride yarım bir dosya kalmaz.
@@ -62,13 +67,27 @@ class YerelDepo:
         hedef.parent.mkdir(parents=True, exist_ok=True)
 
         gecici = hedef.with_name(hedef.name + ".tmp")
-        gecici.write_bytes(_sikistir(icerik))
+        gecici.write_bytes(veri)
         os.replace(gecici, hedef)
         return str(hedef)
 
+    def listele(self, onek: str) -> list[str]:
+        """Önekle başlayan dosyaların göreli yollarını sıralı döndürür."""
+        klasor = self.kok / onek
+        if not klasor.exists():
+            return []
+        return sorted(
+            p.relative_to(self.kok).as_posix()
+            for p in klasor.rglob("*")
+            if p.is_file() and not p.name.endswith(".tmp")
+        )
+
+    def oku_bayt(self, goreli_yol: str) -> bytes:
+        return (self.kok / goreli_yol).read_bytes()
+
 
 class BlobDepo:
-    """Ham yanıtları Azure Blob Storage'a yazar (bulut ortamı).
+    """Dosyaları Azure Blob Storage'a yazar ve okur (bulut ortamı).
 
     Blob yüklemesi kendiliğinden atomiktir: dosya ya tamamen yüklenir ya hiç
     görünmez. Bu yüzden .tmp hilesine gerek yok.
@@ -96,19 +115,38 @@ class BlobDepo:
         self.kap = servis.get_container_client(kap)
 
     def yaz(self, goreli_yol: str, icerik: Any) -> str:
-        """İçeriği sıkıştırıp blob olarak yükler, blob adresini döndürür."""
-        blob = self.kap.upload_blob(goreli_yol, _sikistir(icerik), overwrite=True)
-        return blob.url
+        """İçeriği JSON'a çevirip sıkıştırarak yükler."""
+        return self.yaz_bayt(goreli_yol, _sikistir(icerik))
+
+    def yaz_bayt(self, goreli_yol: str, veri: bytes) -> str:
+        """Hazır baytları blob olarak yükler, blob adresini döndürür."""
+        return self.kap.upload_blob(goreli_yol, veri, overwrite=True).url
+
+    def listele(self, onek: str) -> list[str]:
+        """Önekle başlayan blob adlarını sıralı döndürür.
+
+        Önek, klasör gibi davranır: "2026/09/24/" sadece o günü listeler.
+        Tüm kabı taramaktan çok daha hızlı ve ucuz.
+        """
+        return sorted(b.name for b in self.kap.list_blobs(name_starts_with=onek))
+
+    def oku_bayt(self, goreli_yol: str) -> bytes:
+        return self.kap.download_blob(goreli_yol).readall()
 
 
-def depo_olustur() -> YerelDepo | BlobDepo:
-    """DEPO_TURU ayarına göre doğru depoyu döndürür."""
+def depo_olustur(kap: str | None = None) -> YerelDepo | BlobDepo:
+    """DEPO_TURU ayarına göre doğru depoyu döndürür.
+
+    kap: hangi bölme — "ham" (varsayılan) ya da "tablo". Yerelde veri/<kap>/
+    klasörüne, bulutta aynı adlı blob kabına karşılık gelir.
+    """
+    kap = kap or ayarlar.AZURE_KAP
     if ayarlar.DEPO_TURU == "blob":
         if not ayarlar.AZURE_DEPOLAMA_HESABI:
             raise ValueError("DEPO_TURU=blob için AZURE_DEPOLAMA_HESABI ayarlanmalı")
-        return BlobDepo(ayarlar.AZURE_DEPOLAMA_HESABI, ayarlar.AZURE_KAP)
+        return BlobDepo(ayarlar.AZURE_DEPOLAMA_HESABI, kap)
     if ayarlar.DEPO_TURU == "yerel":
-        return YerelDepo(ayarlar.HAM_KOK)
+        return YerelDepo(ayarlar.VERI_KOK / kap)
     raise ValueError(f"bilinmeyen DEPO_TURU: {ayarlar.DEPO_TURU!r} (yerel veya blob olmalı)")
 
 
