@@ -37,5 +37,10 @@ AZURE_DEPOLAMA_HESABI = os.getenv("AZURE_DEPOLAMA_HESABI", "")
 AZURE_KAP = os.getenv("AZURE_KAP", "ham")        # ham turlar (L0 yazar)
 TABLO_KAP = os.getenv("TABLO_KAP", "tablo")      # günlük tablolar (L1 yazar)
 
+# Özellikler (L2)
+# Kaç dakika sonrasını tahmin ediyoruz. Sürücü otoparka ortalama bu kadar
+# sürede varıyor varsayımı. 5'in katı olmalı, çünkü veri 5 dakikalık.
+TAHMIN_UFKU_DK = int(os.getenv("TAHMIN_UFKU_DK", "30"))
+
 # Günlük
 LOG_SEVIYESI = os.getenv("LOG_SEVIYESI", "INFO").upper()
