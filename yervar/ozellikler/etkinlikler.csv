@@ -1,0 +1,10 @@
+# Olay günlüğü: otoparkları etkileyebilecek maç, konser, miting, fuar...
+#
+# Şimdilik modele girmiyor. İki işe yarayacak:
+#   1. 3-4 hafta sonra veriden bulduğumuz olağandışı anları bununla karşılaştırmak.
+#   2. Etkinlik API'si bağlarsak onun eksiklerini görmek.
+#
+# Zamanlar İstanbul saati. Bitiş bilinmiyorsa tahmini yaz (maç ~2 saat, konser ~3 saat).
+# lat/lng mekanın konumu (Google Maps'te sağ tık → koordinat).
+# tur: mac, konser, miting, fuar, diger
+baslangic_ist,bitis_ist,ad,tur,mekan,lat,lng,kaynak
