@@ -1,0 +1,20 @@
+# Kütüphanenin bilmediği özel dönemler. Elle tutuluyor.
+#
+# tur:
+#   idari_izin   Kamu için ilan edilen idari izin günleri (genelgeyle açıklanır)
+#   okul_tatili  MEB takvimindeki ara tatiller, yarıyıl ve yaz tatili
+#
+# Tarihler İstanbul saatine göre gün, iki uç da dahil.
+# Yeni bir genelge ya da takvim açıklanınca buraya satır ekle, kaynağını da yaz.
+#
+# Kaynaklar:
+#   İdari izin 25 Mayıs 2026: Cumhurbaşkanlığı genelgesi, 12 Mayıs 2026 (memurlar.net)
+#   Okul takvimi 2026-2027: meb.gov.tr, "2026-2027 Eğitim Öğretim Yılı Takvimi Açıklandı"
+#
+# Bekleyen: 2026 Cumhuriyet Bayramı (28-29 Ekim) için idari izin açıklanırsa ekle.
+# Bekleyen: 2027 yaz tatili bitişi (2027-2028 takvimi açıklanınca).
+baslangic,bitis,tur,ad
+2026-05-25,2026-05-25,idari_izin,Kurban Bayramı öncesi idari izin
+2026-11-16,2026-11-20,okul_tatili,1. dönem ara tatil
+2027-01-25,2027-02-05,okul_tatili,Yarıyıl tatili
+2027-03-08,2027-03-12,okul_tatili,2. dönem ara tatil

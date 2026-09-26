@@ -12,8 +12,9 @@ Geçmiş değerleri satır sırasıyla değil zamanla buluyoruz: "5 dk önce" ge
 10 dk önceki değer onun yerine geçmiyor. V-006'daki hatayı burada tekrarlamıyoruz.
 
 Çalıştırma:
-    python -m yervar.ozellikler.olustur --baslangic 2026-09-24
-    DEPO_TURU=blob python -m yervar.ozellikler.olustur --baslangic 2026-09-24
+    python -m yervar.ozellikler.olustur                     # 24 Eylül'den düne kadar
+    DEPO_TURU=blob python -m yervar.ozellikler.olustur      # aynısı, buluttan
+    python -m yervar.ozellikler.olustur --baslangic 2026-10-01 --bitis 2026-10-07
 Çıktı: veri/ozellikler/ozellik_seti.parquet
 """
 
@@ -89,8 +90,10 @@ SELECT
     hour(t.zaman_ist) * 60 + minute(t.zaman_ist)    AS gunun_dakikasi,
     isodow(t.zaman_ist)                             AS haftanin_gunu,   -- 1 pzt ... 7 paz
     isodow(t.zaman_ist) >= 6                        AS hafta_sonu,
-    coalesce(NOT k.yarim_gun, false)                AS resmi_tatil,
-    coalesce(k.yarim_gun, false)                    AS arife,
+    coalesce(k.resmi_tatil, false)                  AS resmi_tatil,
+    coalesce(k.arife, false)                        AS arife,
+    coalesce(k.idari_izin, false)                   AS idari_izin,
+    coalesce(k.okul_tatili, false)                  AS okul_tatili,
 
     -- otoparkın sabit bilgileri
     o.ilce,
@@ -126,33 +129,54 @@ ORDER BY t.zaman_utc, t.park_id
 """
 
 
-def ozellik_seti(con: duckdb.DuckDBPyConnection, bas: date, bit: date) -> duckdb.DuckDBPyRelation:
+def ozellik_seti(
+    con: duckdb.DuckDBPyConnection,
+    bas: date,
+    bit: date,
+    en_erken: date | None = None,
+    ufuk_dk: int | None = None,
+) -> duckdb.DuckDBPyRelation:
     """bas ile bit (dahil) arasındaki günler için özellik satırlarını döndürür.
 
     con içinde doluluk ve otoparklar tabloları hazır olmalı. Hedefi boş olan
     satırlar da dönüyor: eğitimde atılacaklar ama canlıda tahmin tam o satırlar
     için yapılacak.
+
+    en_erken verilirse bu günden önceki veriye geçmiş değer için bile bakılmaz.
+    Referans günümüzden önceki Mac dönemi böylece hiçbir sütuna sızmıyor.
+
+    ufuk_dk verilmezse ayarlardaki TAHMIN_UFKU_DK kullanılıyor.
     """
-    takvimi_yukle(con, bas - timedelta(days=GERIYE_BAKIS_GUN), bit)
+    okuma_bas = bas - timedelta(days=GERIYE_BAKIS_GUN)
+    if en_erken:
+        okuma_bas = max(okuma_bas, en_erken)
+
+    takvimi_yukle(con, okuma_bas, bit)
     parametreler = {
         "bas": bas,
         "bit": bit,
-        "okuma_bas": bas - timedelta(days=GERIYE_BAKIS_GUN),
+        "okuma_bas": okuma_bas,
         "okuma_bit": bit + timedelta(days=1),  # gece yarısına yakın satırların hedefi ertesi günde
     }
-    return con.sql(ozellik_sql(ayarlar.TAHMIN_UFKU_DK), params=parametreler)
+    ufuk = ufuk_dk or ayarlar.TAHMIN_UFKU_DK
+    return con.sql(ozellik_sql(ufuk), params=parametreler)
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="L1 tablolarından özellik seti üret (L2)")
-    ap.add_argument("--baslangic", type=date.fromisoformat, required=True)
+    ap.add_argument(
+        "--baslangic", type=date.fromisoformat,
+        default=date.fromisoformat(ayarlar.VERI_BASLANGIC),
+        help="varsayılan: referans başlangıç günü (VERI_BASLANGIC)",
+    )
     ap.add_argument("--bitis", type=date.fromisoformat, help="varsayılan: dün (UTC)")
     arg = ap.parse_args()
     bit = arg.bitis or datetime.now(UTC).date() - timedelta(days=1)
 
     con = duckdb.connect()
     tablolari_bagla(con)
-    ozellikler = ozellik_seti(con, arg.baslangic, bit)
+    en_erken = date.fromisoformat(ayarlar.VERI_BASLANGIC)
+    ozellikler = ozellik_seti(con, arg.baslangic, bit, en_erken)
 
     hedef_klasor = ayarlar.VERI_KOK / "ozellikler"
     hedef_klasor.mkdir(parents=True, exist_ok=True)

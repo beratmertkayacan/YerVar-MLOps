@@ -10,7 +10,7 @@ from datetime import date, datetime, timedelta
 import duckdb
 
 from yervar.ozellikler.olustur import ozellik_seti
-from yervar.ozellikler.takvim import tatil_gunleri
+from yervar.ozellikler.takvim import ozel_donemler, takvim_satirlari, tatil_gunleri
 
 BAS = datetime(2026, 9, 24, 6, 0)  # UTC, İstanbul 09:00
 
@@ -122,3 +122,24 @@ def test_tatil_listesinde_2026_bayramlari_var() -> None:
     gunler = {s["tarih"]: s["yarim_gun"] for s in tatil_gunleri([2026])}
     assert gunler[date(2026, 3, 20)] is False  # Ramazan Bayramı
     assert gunler[date(2026, 5, 26)] is True   # Kurban Bayramı arifesi
+
+
+def test_ozel_donemler_takvime_islenir() -> None:
+    donemler = [
+        {"baslangic": date(2026, 11, 16), "bitis": date(2026, 11, 20),
+         "tur": "okul_tatili", "ad": "ara tatil"},
+        {"baslangic": date(2026, 10, 30), "bitis": date(2026, 10, 30),
+         "tur": "idari_izin", "ad": "deneme"},
+    ]
+    satirlar = takvim_satirlari(date(2026, 10, 28), date(2026, 11, 21), donemler)
+    gunler = {s["tarih"]: s for s in satirlar}
+    assert gunler[date(2026, 11, 18)]["okul_tatili"] is True
+    assert gunler[date(2026, 11, 21)]["okul_tatili"] is False
+    assert gunler[date(2026, 10, 30)]["idari_izin"] is True
+    assert gunler[date(2026, 10, 29)]["resmi_tatil"] is True
+    assert gunler[date(2026, 10, 28)]["arife"] is True
+
+
+def test_ozel_donemler_dosyasi_okunur() -> None:
+    turler = {d["tur"] for d in ozel_donemler()}
+    assert turler <= {"idari_izin", "okul_tatili"}

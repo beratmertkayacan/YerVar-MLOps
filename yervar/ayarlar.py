@@ -32,12 +32,17 @@ DEPO_TURU = os.getenv("DEPO_TURU", "yerel")
 VERI_KOK = PROJE_KOKU / os.getenv("VERI_KOK", "veri")
 HAM_KOK = VERI_KOK / "ham"
 
-# Azure Blob depo — parola yok; kimlik, bulutta yönetilen kimlikten (managed identity), yerelde `az login` oturumundan otomatik alınır.
+# Azure Blob depo — parola yok; kimlik, bulutta yönetilen kimlikten (managed identity), 
+# yerelde `az login` oturumundan otomatik alınır.
 AZURE_DEPOLAMA_HESABI = os.getenv("AZURE_DEPOLAMA_HESABI", "")
 AZURE_KAP = os.getenv("AZURE_KAP", "ham")        # ham turlar (L0 yazar)
 TABLO_KAP = os.getenv("TABLO_KAP", "tablo")      # günlük tablolar (L1 yazar)
 
 # Özellikler (L2)
+# Referans başlangıç günü. Veri bu günden itibaren bulutta, boşluksuz toplanıyor.
+# Öncesi Mac dönemi (22-23 Eylül): uyku boşlukları var, analize ve eğitime girmez.
+VERI_BASLANGIC = os.getenv("VERI_BASLANGIC", "2026-09-24")
+
 # Kaç dakika sonrasını tahmin ediyoruz. Sürücü otoparka ortalama bu kadar
 # sürede varıyor varsayımı. 5'in katı olmalı, çünkü veri 5 dakikalık.
 TAHMIN_UFKU_DK = int(os.getenv("TAHMIN_UFKU_DK", "30"))
