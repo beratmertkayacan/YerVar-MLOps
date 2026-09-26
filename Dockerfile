@@ -28,6 +28,11 @@ RUN mkdir veri && chown yervar:yervar veri
 # Konteyner root yetkisiyle çalışmasın: bir açık olursa etkisi sınırlı kalır.
 USER yervar
 
-# Varsayılan: tek tur çalış ve çık. Bulutta zamanlayıcı bunu her 5 dakikada
-# bir başlatacak. Sürekli mod için komut `docker run` sırasında değiştirilir.
-CMD ["python", "-m", "yervar.toplama.toplayici", "--tek-tur"]
+# Komut iki parçaya bölündü:
+#   ENTRYPOINT  sabit kısım      → python -m
+#   CMD         değişen kısım    → hangi modül, hangi seçenekler
+# Varsayılan: toplayıcı tek tur çalışır ve çıkar (5 dakikalık iş bunu kullanır).
+# Gece tablo işi sadece CMD'yi değiştirir: "yervar.depolama.tablo".
+# Yerelde de aynısı: docker run <imaj> yervar.depolama.tablo --tarih 2026-09-24
+ENTRYPOINT ["python", "-m"]
+CMD ["yervar.toplama.toplayici", "--tek-tur"]
