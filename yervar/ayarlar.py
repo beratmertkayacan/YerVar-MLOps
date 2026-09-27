@@ -47,5 +47,11 @@ VERI_BASLANGIC = os.getenv("VERI_BASLANGIC", "2026-09-24")
 # sürede varıyor varsayımı. 5'in katı olmalı, çünkü veri 5 dakikalık.
 TAHMIN_UFKU_DK = int(os.getenv("TAHMIN_UFKU_DK", "30"))
 
+# Deney takibi (L3)
+# Şimdilik yerel bir dosya. Azure ML'e geçince sadece bu adres değişecek.
+MLFLOW_ADRES = os.getenv(
+    "MLFLOW_TRACKING_URI", f"sqlite:///{(VERI_KOK / 'mlflow.db').as_posix()}"
+)
+
 # Günlük
 LOG_SEVIYESI = os.getenv("LOG_SEVIYESI", "INFO").upper()
