@@ -22,7 +22,7 @@ export IS_TABLO=job-yervar-tablo  # her gece: dünün tablosu (L1)
 # Tek imaj, iki iş: toplayıcı ve tablo işi aynı imajı farklı komutla çalıştırıyor.
 # 0.3 ile imajın adı yervar-toplayici'dan yervar'a geçti, çünkü artık sadece
 # toplayıcı değil. Eski sürümler kayıt defterinde eski adla duruyor.
-export SURUM=0.3
+export SURUM=0.4
 export IMAJ=$KAYIT.azurecr.io/yervar:$SURUM
 
 # -Python uygulamasının okuduğu isimler 

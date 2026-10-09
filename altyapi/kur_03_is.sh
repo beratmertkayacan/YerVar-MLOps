@@ -42,14 +42,19 @@ else
 fi
 
 # --- 3. İş -------------------------------------------------------------------
+# Süre sınırı 240 sn: tur aralığı 5 dk, bir sonraki tur başlamadan biter.
+# Azure'un yeniden deneme hakkı 0: denemeleri kod içinde, süre bütçesiyle
+# yapıyoruz (TUR_SURE_BUTCESI_SN). Azure'un yeniden denemesi aynı süre
+# sınırını paylaşıyordu ve 30 Eylül'de tam bu yüzden bir tur başarısız sayıldı.
 if az containerapp job show -n "$IS" -g "$KG" -o none 2>/dev/null; then
   echo "▶ İş zaten var, imaj güncelleniyor: $IMAJ"
-  az containerapp job update -n "$IS" -g "$KG" --image "$IMAJ" -o none
+  az containerapp job update -n "$IS" -g "$KG" --image "$IMAJ" \
+    --replica-timeout 240 --replica-retry-limit 0 -o none
 else
   echo "▶ Zamanlanmış iş oluşturuluyor: $IS"
   az containerapp job create -n "$IS" -g "$KG" --environment "$ORTAM" \
     --trigger-type Schedule --cron-expression "*/5 * * * *" \
-    --replica-timeout 120 --replica-retry-limit 1 \
+    --replica-timeout 240 --replica-retry-limit 0 \
     --parallelism 1 --replica-completion-count 1 \
     --cpu 0.25 --memory 0.5Gi \
     --image "$IMAJ" \
