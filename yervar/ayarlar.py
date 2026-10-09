@@ -22,7 +22,12 @@ KULLANICI_AJANI = os.getenv("KULLANICI_AJANI", "yervar/0.1")
 # Toplama
 TOPLAMA_ARALIGI_SN = int(os.getenv("TOPLAMA_ARALIGI_SN", "300"))
 ISTEK_ZAMAN_ASIMI_SN = float(os.getenv("ISTEK_ZAMAN_ASIMI_SN", "20"))
-DENEME_SAYISI = int(os.getenv("DENEME_SAYISI", "3"))
+DENEME_SAYISI = int(os.getenv("DENEME_SAYISI", "5"))
+# Bir turun İSPARK'ı beklemek için harcayabileceği en fazla süre. İşin Azure'daki
+# süre sınırının (240 sn) altında kalmalı: konteynerin açılması ve Blob'a yazmak
+# için pay bırakıyoruz. 30 Eylül'de 120 sn'lik sınıra takılıp veri yazıldığı
+# halde başarısız sayılan bir tur oldu (V-011).
+TUR_SURE_BUTCESI_SN = float(os.getenv("TUR_SURE_BUTCESI_SN", "150"))
 
 # Depolama
 # DEPO_TURU: "yerel" → diske yazar (geliştirme), "blob" → Azure Blob Storage'a yazar (bulut)

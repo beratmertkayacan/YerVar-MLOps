@@ -5,7 +5,11 @@ Tek işi: isteği yapmak ve geçici hatalarda tekrar denemek. Yanıtı yorumlama
 Hangi hatada tekrar deneriz?
 - Ağ hatası, zaman aşımı, 5xx  → sunucunun geçici sorunu, bekle ve tekrar dene
 - 4xx                          → isteğimiz yanlış, tekrar denemek anlamsız
-Bekleme süresi her denemede ikiye katlanır (2 → 4 → 8 sn): üstel geri çekilme.
+Bekleme süresi her denemede ikiye katlanır (2 → 4 → 8 → 16 sn): üstel geri çekilme.
+
+Denemeler bir süre bütçesiyle sınırlı. Bütçe biterse ya da denemeler tükenirse
+KaynakHatasi fırlatılıyor. Bu, "İSPARK cevap vermedi" demek; bizim kodda bir
+hata olmadığını log'da ayırt edebilmek için ayrı bir hata tipi.
 """
 
 import time
@@ -17,6 +21,10 @@ from yervar import ayarlar
 from yervar.gunluk import gunluk_al
 
 gunluk = gunluk_al(__name__)
+
+
+class KaynakHatasi(RuntimeError):
+    """İSPARK'a ulaşılamadı (5xx ya da bağlantı hatası). Bu tur kayıp."""
 
 
 def istemci_olustur() -> httpx.Client:
@@ -31,13 +39,19 @@ def istemci_olustur() -> httpx.Client:
     )
 
 
-def park_listesi_getir(istemci: httpx.Client) -> list[dict[str, Any]]:
+def park_listesi_getir(
+    istemci: httpx.Client, butce_sn: float | None = None
+) -> list[dict[str, Any]]:
     """Tüm otoparkların anlık durumunu döndürür.
 
     Liste ucu kapasite ve boş yer bilgisini içeriyor (kesif/ornek'e bakın),
     bu yüzden her tur için tek bir istek yeterli.
+
+    butce_sn: denemelere ayrılan toplam süre. Verilmezse TUR_SURE_BUTCESI_SN.
     """
     adres = f"{ayarlar.ISPARK_TABAN_URL}/Park"
+    butce = ayarlar.TUR_SURE_BUTCESI_SN if butce_sn is None else butce_sn
+    bitis = time.monotonic() + butce
     bekleme = 2.0
     hata = ""
 
@@ -51,9 +65,12 @@ def park_listesi_getir(istemci: httpx.Client) -> list[dict[str, Any]]:
         except httpx.TransportError as e:  # bağlantı hatası, zaman aşımı
             hata = str(e)
 
-        if deneme < ayarlar.DENEME_SAYISI:
-            gunluk.warning("deneme %d başarısız (%s), %.0f sn sonra tekrar", deneme, hata, bekleme)
-            time.sleep(bekleme)
-            bekleme *= 2
+        son_deneme = deneme == ayarlar.DENEME_SAYISI
+        butce_bitiyor = time.monotonic() + bekleme >= bitis
+        if son_deneme or butce_bitiyor:
+            break
+        gunluk.warning("deneme %d başarısız (%s), %.0f sn sonra tekrar", deneme, hata, bekleme)
+        time.sleep(bekleme)
+        bekleme *= 2
 
-    raise RuntimeError(f"{ayarlar.DENEME_SAYISI} deneme başarısız: {hata}")
+    raise KaynakHatasi(f"{deneme} deneme başarısız: {hata}")

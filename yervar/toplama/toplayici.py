@@ -17,7 +17,7 @@ import httpx
 from yervar import ayarlar
 from yervar.depolama.ham import BlobDepo, YerelDepo, depo_olustur, ham_yol, simdi_utc
 from yervar.gunluk import gunluk_al
-from yervar.toplama.istemci import istemci_olustur, park_listesi_getir
+from yervar.toplama.istemci import KaynakHatasi, istemci_olustur, park_listesi_getir
 
 gunluk = gunluk_al("yervar.toplama.toplayici")
 _calisiyor = True
@@ -71,7 +71,13 @@ def main() -> None:
     depo = depo_olustur()
     with istemci_olustur() as istemci:
         if tek:
-            tek_tur(istemci, depo)
+            try:
+                tek_tur(istemci, depo)
+            except KaynakHatasi as hata:
+                # Sebep belli, kodda hata yok: uzun hata izi yerine tek, aranabilir
+                # bir satır. Alarm ve log sorguları "KAYNAK_KESINTISI" kelimesini arar.
+                gunluk.error("KAYNAK_KESINTISI: İSPARK'a ulaşılamadı, bu tur kayıp (%s)", hata)
+                raise SystemExit(1) from None
         else:
             aralik, tur = ayarlar.TOPLAMA_ARALIGI_SN, ayarlar.DEPO_TURU
             gunluk.info("toplayıcı başladı: her %d sn → %s depo", aralik, tur)
