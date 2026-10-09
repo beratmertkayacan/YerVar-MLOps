@@ -82,3 +82,49 @@ FROM aralar WHERE ara > INTERVAL 5 MINUTE ORDER BY ara DESC;
 SELECT count(*) FILTER (NOT gecerli) AS gecersiz_satir,
        count(*) FILTER (kapasite = 0) AS kapasitesi_sifir
 FROM doluluk;
+
+
+-- V-011: Bulutta da boşluk var mı? Gün gün eksik tur ve en uzun boşluk.
+-- (Referans günden itibaren. Tam gün 288 tur.)
+WITH turlar AS (
+    SELECT DISTINCT tarih, zaman_utc FROM doluluk WHERE tarih >= DATE '2026-09-24'
+),
+aralar AS (
+    SELECT tarih, zaman_utc - lag(zaman_utc) OVER (ORDER BY zaman_utc) AS ara FROM turlar
+)
+SELECT tarih, 288 - count(*) AS eksik_tur, max(ara) AS en_uzun_ara
+FROM aralar GROUP BY tarih ORDER BY tarih;
+
+
+-- V-012: Listeden çıkan otoparklar. API'nin döndürdüğü otopark sayısı değişiyor mu?
+SELECT tarih, count(DISTINCT park_id) AS otopark
+FROM doluluk GROUP BY tarih ORDER BY tarih;
+
+SELECT park_id, max(zaman_ist) AS son_gorulme, count(DISTINCT tarih) AS gun
+FROM doluluk
+GROUP BY park_id
+HAVING max(tarih) < (SELECT max(tarih) FROM doluluk)
+ORDER BY son_gorulme;
+
+
+-- V-013: Tek turluk sıçramalar. Önceki ve sonraki tur birbirine yakın, arada
+-- tek bir tur ikisinden de çok farklı: gerçek araç hareketi değil, veri hatası.
+-- Hangi saatlerde yoğunlaşıyor?
+WITH komsular AS (
+    SELECT park_id, zaman_ist, kapasite, bos,
+           lag(bos)  OVER w AS onceki,
+           lead(bos) OVER w AS sonraki,
+           zaman_utc - lag(zaman_utc)  OVER w AS ara_once,
+           lead(zaman_utc) OVER w - zaman_utc AS ara_sonra
+    FROM doluluk
+    WHERE tarih >= DATE '2026-09-24' AND canli
+    WINDOW w AS (PARTITION BY park_id ORDER BY zaman_utc)
+),
+sicramalar AS (
+    SELECT * FROM komsular
+    WHERE ara_once = INTERVAL 5 MINUTE AND ara_sonra = INTERVAL 5 MINUTE
+      AND abs(onceki - sonraki) <= 0.05 * kapasite
+      AND abs(bos - onceki) >= greatest(0.3 * kapasite, 10)
+)
+SELECT hour(zaman_ist) AS ist_saat, count(*) AS sicrama, count(DISTINCT park_id) AS otopark
+FROM sicramalar GROUP BY ist_saat ORDER BY sicrama DESC LIMIT 10;
