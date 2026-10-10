@@ -18,6 +18,7 @@ export KIMLIK_ACR=id-yervar-acr # imaj çekme kimliği (sadece AcrPull)
 export ORTAM=cae-yervar  # Container Apps ortamı
 export IS=job-yervar-toplayici  # 5 dakikada bir: toplama (L0)
 export IS_TABLO=job-yervar-tablo  # her gece: dünün tablosu (L1)
+export EYLEM_GRUBU=ag-yervar  # alarm e-postalarının gittiği eylem grubu
 
 # Tek imaj, iki iş: toplayıcı ve tablo işi aynı imajı farklı komutla çalıştırıyor.
 # 0.3 ile imajın adı yervar-toplayici'dan yervar'a geçti, çünkü artık sadece
