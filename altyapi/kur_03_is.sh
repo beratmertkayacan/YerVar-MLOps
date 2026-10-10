@@ -2,8 +2,8 @@
 # Adım 3 — Kimlikler, Container Apps ortamı ve 5 dakikada bir çalışan iş.
 #
 # Kimlik tasarımı (Microsoft'un Container Apps güvenlik önerisi):
-#   id-yervar-acr  kullanıcı atamalı  → SADECE imaj çekme (AcrPull)
-#   işin kendisi   sistem atamalı     → SADECE blob yazma
+#   id-yervar-acr  kullanıcı atamalı -> SADECE imaj çekme (AcrPull)
+#   işin kendisi   sistem atamalı -> SADECE blob yazma
 # Birbirinden ayrı iki kimlik: biri sızarsa diğerinin yetkisi gitmez.
 # Sistem atamalı kimlik işle doğar, işle ölür; unutulmuş yetki kalmaz.
 #
@@ -64,6 +64,15 @@ else
     -o none
 fi
 
+# az containerapp, "--replica-retry-limit 0" değerini "verilmemiş" sayıp
+# göndermiyor (0'ı boş sanıyor). Değeri genel kaynak komutuyla ayrıca yazıyoruz,
+# sonra kontrol ediyoruz. 9 Ekim'de bu yüzden bulutta 1 kalmıştı.
+az resource update -g "$KG" -n "$IS" --resource-type Microsoft.App/jobs \
+  --set properties.configuration.replicaRetryLimit=0 -o none
+DENEME=$(az containerapp job show -n "$IS" -g "$KG" \
+  --query properties.configuration.replicaRetryLimit -o tsv)
+[ "$DENEME" = "0" ] || { echo "HATA: yeniden deneme hakkı 0 değil ($DENEME)"; exit 1; }
+
 # --- 4. İşin kendi kimliğine veri yetkisi -------------------------------------
 # Sistem atamalı kimlik ancak iş oluştuktan sonra var olur; yetki bu yüzden sonra.
 echo "▶ İşin kimliğine blob yazma yetkisi"
@@ -74,7 +83,7 @@ az role assignment create --assignee-object-id "$IS_ASIL" \
   || echo "  (rol zaten var)"
 
 echo
-echo "✓ Bitti. Rollerin yayılması için ~5 dakika bekle, sonra elle bir kez başlat:"
+echo " Bitti. Rollerin yayılması için ~5 dakika bekle, sonra elle bir kez başlat:"
 echo "    az containerapp job start -n $IS -g $KG"
 echo "  Durumu izle:"
 echo "    az containerapp job execution list -n $IS -g $KG -o table \\"
