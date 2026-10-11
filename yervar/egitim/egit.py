@@ -130,13 +130,10 @@ def model_kur() -> HistGradientBoostingRegressor:
 
 
 def ogrenme_hedefi(df: pd.DataFrame, hedef_turu: str) -> pd.Series:
-    """Modelin öğreneceği sayı.
+    """Modelin öğreneceği değer: seviye ya da şimdiki değere göre fark.
 
-    "fark" neden denemeye değer: karne, modelin dolu otoparklarda "şimdiki gibi"ye
-    yenildiğini ve dolu anları kaçırdığını gösterdi (sapma hep eksi). Doğrudan
-    seviyeyi öğrenen ağaç modeli uçlardaki değerleri ortalamaya doğru çekiyor.
-    Farkı öğrenince "hiçbir şey değişmez" (fark = 0) modelin doğal başlangıç
-    noktası oluyor; şimdiki değer tahmine olduğu gibi taşınıyor.
+    Fark hedefinde değişim yoksa tahmin şimdiki değere eşit olur. Seviye
+    modeli dolu otoparklarda değeri aşağı çekiyordu (karnede sapma eksi).
     """
     if hedef_turu == "fark":
         return df["hedef"] - df["doluluk_simdi"]
@@ -144,7 +141,7 @@ def ogrenme_hedefi(df: pd.DataFrame, hedef_turu: str) -> pd.Series:
 
 
 def tahmine_cevir(ham: pd.Series, df: pd.DataFrame, hedef_turu: str) -> pd.Series:
-    """Modelin çıktısını doluluk oranına çevirir (fark ise şimdikine ekler)."""
+    """Model çıktısını doluluk oranına çevirir."""
     if hedef_turu == "fark":
         ham = df["doluluk_simdi"] + ham
     return ham.clip(0, 1)
@@ -179,7 +176,7 @@ def geri_test(
             "atilan": [s for s in OZELLIKLER if s not in sutunlar],
             "hatalar": degerlendir(test, tahminler),
             "_model": model, "_sutunlar": sutunlar, "_test": test, "_hedef_turu": hedef_turu,
-            # Karne için: gerçek değer ve tahminler yan yana, satır satır.
+            # karne için gerçek değer ve tahminler
             "_tahmin": test[KARNE_SUTUNLARI].assign(
                 t_simdiki=tahminler["simdiki_gibi"], t_dun=tahminler["dun_ayni_saat"],
                 t_model=tahmin,
@@ -237,7 +234,7 @@ def deneyi_hazirla() -> None:
 
 
 def karneyi_kaydet(karne: dict) -> None:
-    """Karne tablolarını CSV olarak, tek sayılık özetleri metrik olarak yazar."""
+    """Tablolar CSV, özetler metrik olarak."""
     for ad, tablo in karne["tablolar"].items():
         mlflow.log_text(tablo.to_csv(), f"karne/{ad}.csv")
     mlflow.log_dict(karne["karar"], "karne/karar.json")
@@ -245,7 +242,7 @@ def karneyi_kaydet(karne: dict) -> None:
     mlflow.log_metric("modelin_yenildigi_otopark", karne["modelin_yenildigi_otopark"])
     for ad in ("simdiki_gibi", "model"):
         for olcu, deger in karne["karar"][ad].items():
-            if deger is not None:  # olay yoksa oran tanımsız, MLflow'a yazmıyoruz
+            if deger is not None:
                 mlflow.log_metric(f"{ad}_{olcu}", deger)
 
 
@@ -258,8 +255,7 @@ def kaydet(
         mlflow.log_params({
             "ufuk_dk": ufuk_dk,
             "model": "HistGradientBoostingRegressor",
-            # Canlıda tahmini doluluğa çevirirken bunu bilmek şart: fark modeli
-            # tek başına doluluk değil, değişim veriyor.
+            # canlıda tahmini doluluğa çevirirken gerekli
             "hedef_turu": hedef_turu,
             **MODEL_AYARLARI,
             "veri_ilk": str(df["zaman_utc"].min().date()),
@@ -316,6 +312,8 @@ def main() -> None:
 
     con = duckdb.connect()
     tablolari_bagla(con)
+    # karnedeki otopark tablosunda numaranın yanında ad da görünsün
+    adlar = con.sql("SELECT park_id, ad FROM otoparklar").df().set_index("park_id")["ad"]
     deneyi_hazirla()
 
     for ufuk in arg.ufuk:
@@ -327,7 +325,7 @@ def main() -> None:
             print("  modelin en çok dayandığı sütunlar (son test günü):")
             for ad, d in onem:
                 print(f"    {ad:<22} {d:>6}")
-        karne = karne_olustur(pd.concat(k["_tahmin"] for k in katlar))
+        karne = karne_olustur(pd.concat(k["_tahmin"] for k in katlar), adlar)
         karne_yazdir(karne)
         kaydet(ufuk, df, katlar, onem, karne, arg.hedef)
 

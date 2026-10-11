@@ -1,43 +1,27 @@
-"""L4: Modelin karnesi. Hata nerede, ne zaman, hangi otoparkta?
+"""L4: geri test sonuçlarının kırılımları ve "dolu mu?" ölçüleri.
 
-Tek bir ortalama hata çok şey saklıyor. 1,0 puanlık ortalama, gece boş duran
-yüz otoparkta 0 hata ile sabah dolan on otoparkta 10 hatanın ortalaması
-olabilir. Kullanıcı ise tam o sabah saatini soruyor. Bu yüzden hatayı
-parçalara ayırıyoruz (kırılım):
+Girdi, geri testin bütün günlerini içeren tek tablo: her satırda gerçek değer
+(hedef) ve yöntemlerin tahminleri (t_simdiki, t_model).
 
-    saat           -> hangi saatler zor?
-    doluluk bandı  -> boşken mi doluyken mi yanılıyor?
-    gün tipi       -> hafta sonu farklı mı?
-    otopark        -> model hangi otoparklarda basit tahmine bile yeniliyor?
-
-Bir de kullanıcının asıl sorusunu ölçüyoruz: "gittiğimde yer olacak mı?"
-Bu artık bir sayı tahmini değil, evet/hayır kararı. Doluluk DOLU_ESIK'in
-üstündeyse otoparkı "dolu" sayıyoruz ve modelin bunu ne kadar yakaladığına
-bakıyoruz. En değerli an "dolma anı": şu an yer var, ufuk sonra dolu.
-"Şimdiki gibi kalır" tahmini bu anları tanım gereği hiç yakalayamaz;
-modelin gerçek katkısı burada görünür.
-
-Girdi: geri testin bütün günlerinden gelen tek tablo. Her satırda gerçek
-değer (hedef) ve her yöntemin tahmini (t_simdiki, t_model) var.
+Kırılımlar: saat, doluluk bandı, gün tipi, otopark.
+Karar ölçüleri: hedef DOLU_ESIK ve üstündeyse otopark dolu sayılır.
+Dolma anı: şu an dolu değil, ufuk sonra dolu.
 """
 
 import pandas as pd
 
-# %95 dolu otoparkı "dolu" sayıyoruz. Varsayım: küçük otoparkta bu 2-3 yer,
-# 4000'lik otoparkta 200 yer demek. Uygulama aşamasında boş yer sayısına göre
-# yeniden düşünülecek, şimdilik herkes için aynı ölçü.
+# Herkes için aynı eşik. Büyük otoparklarda %95 hâlâ çok sayıda boş yer demek;
+# uygulama aşamasında boş yer sayısına göre tekrar bakılacak.
 DOLU_ESIK = 0.95
 
-# Doluluk bantları. Son bandın üst sınırı 1'in biraz üstünde ki 1,0 da girsin.
-BANT_SINIRLARI = [0, 0.5, 0.75, 0.9, 1.01]
+BANT_SINIRLARI = [0, 0.5, 0.75, 0.9, 1.01]  # 1.0 son banda girsin diye 1.01
 BANT_ADLARI = ["%0-50", "%50-75", "%75-90", "%90-100"]
 
-# Karnede karşılaştırdığımız iki yöntem: basit tahmin ve model.
 YONTEMLER = {"simdiki_gibi": "t_simdiki", "model": "t_model"}
 
 
 def hatalari_ekle(df: pd.DataFrame) -> pd.DataFrame:
-    """Her satıra her yöntemin mutlak hatasını (doluluk puanı, 0-100) ekler."""
+    """Mutlak hata (0-100 puan), doluluk bandı ve gün tipi sütunlarını ekler."""
     df = df.copy()
     for ad, sutun in YONTEMLER.items():
         df[f"hata_{ad}"] = 100 * (df["hedef"] - df[sutun]).abs()
@@ -47,11 +31,7 @@ def hatalari_ekle(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def kirilim(df: pd.DataFrame, grup: str) -> pd.DataFrame:
-    """Bir sütuna göre gruplayıp her yöntemin ortalama hatasını verir.
-
-    fark: basit tahminin hatası eksi modelin hatası. Pozitifse model iyi,
-    negatifse model o grupta "şimdiki gibi"ye yeniliyor.
-    """
+    """Gruba göre ortalama hata. fark > 0 ise model daha iyi."""
     g = df.groupby(grup, observed=True)
     tablo = pd.DataFrame({
         "satir": g.size(),
@@ -62,19 +42,20 @@ def kirilim(df: pd.DataFrame, grup: str) -> pd.DataFrame:
     return tablo.round(2)
 
 
-def otopark_kirilimi(df: pd.DataFrame) -> pd.DataFrame:
-    """Otopark başına hata, en kötüden başlayarak."""
+def otopark_kirilimi(df: pd.DataFrame, adlar: pd.Series | None = None) -> pd.DataFrame:
+    """Otopark başına hata, en kötüden başlayarak. adlar: park_id -> ad"""
     tablo = kirilim(df, "park_id")
     bilgi = df.groupby("park_id", observed=True)[["ilce", "tip", "kapasite"]].first()
-    return tablo.join(bilgi).sort_values("model", ascending=False)
+    tablo = tablo.join(bilgi)
+    if adlar is not None:
+        tablo.insert(0, "ad", [adlar.get(p) for p in tablo.index])
+    return tablo.sort_values("model", ascending=False)
 
 
 def karar_olculeri(df: pd.DataFrame, esik: float = DOLU_ESIK) -> dict:
-    """"Dolu mu?" sorusunda yöntemlerin başarısı.
-
-    yakalama : gerçekten dolu olan anların yüzde kaçında "dolu" dedi
-    isabet   : "dolu" dediği anların yüzde kaçı gerçekten dolu çıktı
-    dolma_ani: şu an dolu değil, ufuk sonra dolu. Kaç tane var, kaçını bildi.
+    """yakalama: gerçek dolu anların yüzde kaçı bilindi.
+    isabet: "dolu" denen anların yüzde kaçı doğru çıktı.
+    dolma_ani_yakalama: şu an boş yeri olup ufuk sonra dolanların yüzde kaçı bilindi.
     """
     gercek = df["hedef"] >= esik
     dolma_ani = (df["doluluk_simdi"] < esik) & gercek
@@ -91,23 +72,18 @@ def karar_olculeri(df: pd.DataFrame, esik: float = DOLU_ESIK) -> dict:
 
 
 def _yuzde(pay: int, payda: int) -> float | None:
-    # Hiç olay yoksa oran tanımsız; 0 yazmak "hiç bilemedi" gibi yanıltır.
+    # payda 0 ise oran tanımsız; 0 yazmak yanlış anlaşılır
     return round(100 * pay / payda, 1) if payda else None
 
 
 def sapma(df: pd.DataFrame) -> float:
-    """Model ortalamada fazla mı tahmin ediyor az mı? (puan, + ise fazla)
-
-    Mutlak hata yönü gizler. Sapma sıfırdan uzaksa model sistematik olarak
-    bir tarafa kayıyor demek; bu, hatadan daha kolay düzeltilir.
-    """
+    """Ortalama (tahmin - gerçek), puan. Artı: fazla dolu tahmin."""
     return round(100 * (df["t_model"] - df["hedef"]).mean(), 2)
 
 
-def karne_olustur(tahminler: pd.DataFrame) -> dict:
-    """Bütün karneyi tek sözlükte toplar: tablolar ve tek sayılık özetler."""
+def karne_olustur(tahminler: pd.DataFrame, adlar: pd.Series | None = None) -> dict:
     df = hatalari_ekle(tahminler)
-    otoparklar = otopark_kirilimi(df)
+    otoparklar = otopark_kirilimi(df, adlar)
     return {
         "tablolar": {
             "saat": kirilim(df, "saat"),
@@ -123,7 +99,7 @@ def karne_olustur(tahminler: pd.DataFrame) -> dict:
 
 
 def karne_yazdir(karne: dict) -> None:
-    """Terminale kısa özet. Tabloların tamamı MLflow'da."""
+    """Terminal için kısa özet; tabloların tamamı MLflow'a yazılıyor."""
     t = karne["tablolar"]
     print(f"  {'kırılım':<12} {'şimdiki':>8} {'model':>8} {'fark':>8} {'satır':>8}")
     for tablo in (t["bant"], t["gun_tipi"]):
@@ -133,15 +109,14 @@ def karne_yazdir(karne: dict) -> None:
 
     zor = t["saat"].sort_values("model", ascending=False).head(3)
     saatler = ", ".join(f"{int(s):02d}:00 ({h:.2f})" for s, h in zor["model"].items())
-    print(f"  model için en zor saatler: {saatler}")
-    print(f"  sapma: {karne['sapma']:+} puan (+ ise model fazla dolu sanıyor)")
-    print(f"  modelin basit tahmine yenildiği otopark: "
+    print(f"  en zor saatler: {saatler}")
+    print(f"  sapma: {karne['sapma']:+} puan")
+    print(f"  modelin yenildiği otopark: "
           f"{karne['modelin_yenildigi_otopark']}/{karne['otopark_sayisi']}")
 
     k = karne["karar"]
-    print(f"  'dolu mu?' (%{DOLU_ESIK * 100:.0f}+): {k['dolu_an']} dolu an, "
-          f"{k['dolma_ani']} dolma anı")
+    print(f"  dolu (%{DOLU_ESIK * 100:.0f}+): {k['dolu_an']} an, {k['dolma_ani']} dolma anı")
     for ad in YONTEMLER:
         o = {olcu: "yok" if v is None else f"%{v}" for olcu, v in k[ad].items()}
         print(f"    {ad:<13} yakalama {o['yakalama']}  isabet {o['isabet']}  "
-              f"dolma anı yakalama {o['dolma_ani_yakalama']}")
+              f"dolma anı {o['dolma_ani_yakalama']}")

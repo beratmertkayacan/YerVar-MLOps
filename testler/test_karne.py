@@ -1,5 +1,4 @@
-"""Karnenin testleri. Elle kurulmuş birkaç satırla, sonucu kafadan
-hesaplanabilen durumlar."""
+"""Karne hesaplarının testleri, elle hesaplanabilen küçük örneklerle."""
 
 import pandas as pd
 
@@ -54,7 +53,9 @@ def test_modelin_yenildigi_otopark_sayilir() -> None:
         satir(0.5, 0.7, 0.7, park=2),   # model tam bildi
     ])
 
-    karne = karne_olustur(df)
+    karne = karne_olustur(df, adlar=pd.Series({1: "Birinci", 2: "İkinci"}))
 
     assert karne["modelin_yenildigi_otopark"] == 1
-    assert karne["tablolar"]["otopark"].index[0] == 1   # en kötü otopark en üstte
+    otoparklar = karne["tablolar"]["otopark"]
+    assert otoparklar.index[0] == 1   # en kötü otopark en üstte
+    assert otoparklar["ad"].tolist() == ["Birinci", "İkinci"]
