@@ -13,6 +13,11 @@ Rakipler (referans tahminler):
   - simdiki_gibi : X dk sonra da şimdiki gibi olur
   - dun_ayni_saat: X dk sonra dün o saatte ne idiyse o olur
 
+Hedef türü (--hedef):
+  - seviye: model doğrudan "X dk sonra doluluk kaç" sorusunu öğrenir
+  - fark  : model "X dk içinde doluluk ne kadar değişecek" sorusunu öğrenir,
+            tahmin = şimdiki doluluk + tahmin edilen değişim
+
 Ortalamaların yanında bir de karne çıkıyor (yervar/degerlendirme/karne.py):
 hata hangi saatte, hangi doluluk bandında, hangi otoparkta; "dolu mu?"
 sorusunu ne kadar bildik.
@@ -124,20 +129,43 @@ def model_kur() -> HistGradientBoostingRegressor:
     )
 
 
-def egit_ve_tahmin_et(egitim: pd.DataFrame, test: pd.DataFrame):
+def ogrenme_hedefi(df: pd.DataFrame, hedef_turu: str) -> pd.Series:
+    """Modelin öğreneceği sayı.
+
+    "fark" neden denemeye değer: karne, modelin dolu otoparklarda "şimdiki gibi"ye
+    yenildiğini ve dolu anları kaçırdığını gösterdi (sapma hep eksi). Doğrudan
+    seviyeyi öğrenen ağaç modeli uçlardaki değerleri ortalamaya doğru çekiyor.
+    Farkı öğrenince "hiçbir şey değişmez" (fark = 0) modelin doğal başlangıç
+    noktası oluyor; şimdiki değer tahmine olduğu gibi taşınıyor.
+    """
+    if hedef_turu == "fark":
+        return df["hedef"] - df["doluluk_simdi"]
+    return df["hedef"]
+
+
+def tahmine_cevir(ham: pd.Series, df: pd.DataFrame, hedef_turu: str) -> pd.Series:
+    """Modelin çıktısını doluluk oranına çevirir (fark ise şimdikine ekler)."""
+    if hedef_turu == "fark":
+        ham = df["doluluk_simdi"] + ham
+    return ham.clip(0, 1)
+
+
+def egit_ve_tahmin_et(egitim: pd.DataFrame, test: pd.DataFrame, hedef_turu: str = "seviye"):
     """Eğitimde işe yarayan sütunlarla modeli kurar, testi tahmin eder."""
     sutunlar = bilgili_sutunlar(egitim)
     model = model_kur()
-    model.fit(egitim[sutunlar], egitim["hedef"])
-    tahmin = pd.Series(model.predict(test[sutunlar]), index=test.index).clip(0, 1)
-    return model, sutunlar, tahmin
+    model.fit(egitim[sutunlar], ogrenme_hedefi(egitim, hedef_turu))
+    ham = pd.Series(model.predict(test[sutunlar]), index=test.index)
+    return model, sutunlar, tahmine_cevir(ham, test, hedef_turu)
 
 
-def geri_test(df: pd.DataFrame, ufuk_dk: int, son_gun: int | None) -> list[dict]:
+def geri_test(
+    df: pd.DataFrame, ufuk_dk: int, son_gun: int | None, hedef_turu: str = "seviye"
+) -> list[dict]:
     """Her test günü için modeli eğitip üç yöntemi ölçer."""
     katlar = []
     for gun, egitim, test in gun_katlari(df, ufuk_dk, son_gun=son_gun):
-        model, sutunlar, tahmin = egit_ve_tahmin_et(egitim, test)
+        model, sutunlar, tahmin = egit_ve_tahmin_et(egitim, test, hedef_turu)
         tahminler = {
             "simdiki_gibi": test["doluluk_simdi"],
             # dün değeri yoksa şimdikini kullan, yoksa satırı ölçemeyiz
@@ -150,7 +178,7 @@ def geri_test(df: pd.DataFrame, ufuk_dk: int, son_gun: int | None) -> list[dict]
             "test": len(test),
             "atilan": [s for s in OZELLIKLER if s not in sutunlar],
             "hatalar": degerlendir(test, tahminler),
-            "_model": model, "_sutunlar": sutunlar, "_test": test,
+            "_model": model, "_sutunlar": sutunlar, "_test": test, "_hedef_turu": hedef_turu,
             # Karne için: gerçek değer ve tahminler yan yana, satır satır.
             "_tahmin": test[KARNE_SUTUNLARI].assign(
                 t_simdiki=tahminler["simdiki_gibi"], t_dun=tahminler["dun_ayni_saat"],
@@ -177,7 +205,7 @@ def sutun_onemi(kat: dict) -> list[tuple[str, float]]:
     test = kat["_test"]
     ornek = test.sample(min(3000, len(test)), random_state=0)
     o = permutation_importance(
-        kat["_model"], ornek[kat["_sutunlar"]], ornek["hedef"],
+        kat["_model"], ornek[kat["_sutunlar"]], ogrenme_hedefi(ornek, kat["_hedef_turu"]),
         scoring="neg_mean_absolute_error", n_repeats=3, random_state=0,
     )
     sira = sorted(zip(kat["_sutunlar"], o.importances_mean, strict=True), key=lambda x: -x[1])
@@ -221,13 +249,18 @@ def karneyi_kaydet(karne: dict) -> None:
                 mlflow.log_metric(f"{ad}_{olcu}", deger)
 
 
-def kaydet(ufuk_dk: int, df: pd.DataFrame, katlar: list[dict], onem, karne=None) -> None:
+def kaydet(
+    ufuk_dk: int, df: pd.DataFrame, katlar: list[dict], onem, karne=None, hedef_turu="seviye"
+) -> None:
     ort = ortalama(katlar)
-    with mlflow.start_run(run_name=f"ufuk-{ufuk_dk}dk"):
+    with mlflow.start_run(run_name=f"ufuk-{ufuk_dk}dk-{hedef_turu}"):
         mlflow.set_tags({**git_bilgisi(), "katman": "L3"})
         mlflow.log_params({
             "ufuk_dk": ufuk_dk,
             "model": "HistGradientBoostingRegressor",
+            # Canlıda tahmini doluluğa çevirirken bunu bilmek şart: fark modeli
+            # tek başına doluluk değil, değişim veriyor.
+            "hedef_turu": hedef_turu,
             **MODEL_AYARLARI,
             "veri_ilk": str(df["zaman_utc"].min().date()),
             "veri_son": str(df["zaman_utc"].max().date()),
@@ -248,7 +281,7 @@ def kaydet(ufuk_dk: int, df: pd.DataFrame, katlar: list[dict], onem, karne=None)
         )
         # Canlıda kullanılacak model: bütün veriyle eğitiliyor.
         sutunlar = bilgili_sutunlar(df)
-        son_model = model_kur().fit(df[sutunlar], df["hedef"])
+        son_model = model_kur().fit(df[sutunlar], ogrenme_hedefi(df, hedef_turu))
         mlflow.sklearn.log_model(son_model, name="model", skops_trusted_types=GUVENILEN_TIPLER)
         mlflow.log_dict({"sutunlar": sutunlar}, "sutunlar.json")
         if karne:
@@ -259,7 +292,8 @@ def yazdir(ufuk_dk: int, katlar: list[dict]) -> None:
     ort = ortalama(katlar)
     kazanilan = sum(k["hatalar"]["model"]["genel"] < k["hatalar"]["simdiki_gibi"]["genel"]
                     for k in katlar)
-    print(f"\nUfuk {ufuk_dk} dk, {len(katlar)} test günü ortalaması "
+    print(f"\nUfuk {ufuk_dk} dk, hedef: {katlar[0]['_hedef_turu']}, "
+          f"{len(katlar)} test günü ortalaması "
           f"(model {kazanilan}/{len(katlar)} günde 'şimdiki gibi'yi geçti)")
     print(f"  {'ölçü':<15} {'şimdiki':>8} {'dün':>8} {'model':>8}")
     for o in OLCULER:
@@ -275,6 +309,8 @@ def main() -> None:
     ap.add_argument("--bitis", type=date.fromisoformat, help="varsayılan: dün (UTC)")
     ap.add_argument("--son-gun", type=int, default=7, help="en fazla kaç gün test edilsin")
     ap.add_argument("--onem", action="store_true", help="sütun önemlerini de hesapla")
+    ap.add_argument("--hedef", choices=["seviye", "fark"], default="seviye",
+                    help="model seviyeyi mi, değişimi mi öğrensin")
     arg = ap.parse_args()
     bit = arg.bitis or datetime.now(UTC).date() - timedelta(days=1)
 
@@ -284,7 +320,7 @@ def main() -> None:
 
     for ufuk in arg.ufuk:
         df = veri_hazirla(ozellik_seti(con, arg.baslangic, bit, arg.baslangic, ufuk).df())
-        katlar = geri_test(df, ufuk, arg.son_gun)
+        katlar = geri_test(df, ufuk, arg.son_gun, arg.hedef)
         onem = sutun_onemi(katlar[-1]) if arg.onem else None
         yazdir(ufuk, katlar)
         if onem:
@@ -293,7 +329,7 @@ def main() -> None:
                 print(f"    {ad:<22} {d:>6}")
         karne = karne_olustur(pd.concat(k["_tahmin"] for k in katlar))
         karne_yazdir(karne)
-        kaydet(ufuk, df, katlar, onem, karne)
+        kaydet(ufuk, df, katlar, onem, karne, arg.hedef)
 
     print(f"\nKayıt: {ayarlar.MLFLOW_ADRES}")
     print("Görmek için: mlflow ui --backend-store-uri " + ayarlar.MLFLOW_ADRES)

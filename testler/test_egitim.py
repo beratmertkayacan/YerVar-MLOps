@@ -10,7 +10,14 @@ from yervar import ayarlar
 from yervar.degerlendirme.karne import karne_olustur
 from yervar.egitim import egit
 from yervar.egitim.bolme import gun_katlari
-from yervar.egitim.egit import OZELLIKLER, bilgili_sutunlar, geri_test, veri_hazirla
+from yervar.egitim.egit import (
+    OZELLIKLER,
+    bilgili_sutunlar,
+    geri_test,
+    ogrenme_hedefi,
+    tahmine_cevir,
+    veri_hazirla,
+)
 
 
 def sahte_set(gun_sayisi: int = 2, park_sayisi: int = 3) -> pd.DataFrame:
@@ -76,3 +83,20 @@ def test_geri_test_ve_kayit(tmp_path, monkeypatch) -> None:
     assert len(kosular) == 1
     assert "metrics.model_genel" in kosular.columns
     assert "metrics.model_sapma" in kosular.columns
+
+
+def test_fark_hedefi_geri_cevrilince_dolulugu_verir() -> None:
+    df = pd.DataFrame({"doluluk_simdi": [0.5, 0.9], "hedef": [0.7, 0.95]})
+    fark = ogrenme_hedefi(df, "fark")
+    assert fark.round(2).tolist() == [0.2, 0.05]
+    assert tahmine_cevir(fark, df, "fark").round(2).tolist() == [0.7, 0.95]
+    # Doluluk 1'i geçemez: 0.9 + 0.3 → 1.0
+    assert tahmine_cevir(pd.Series([0.3, 0.3]), df, "fark").tolist() == [0.8, 1.0]
+
+
+def test_fark_modeli_degismeyen_seriyi_aynen_tahmin_eder() -> None:
+    # Sahte veride hedef = şimdiki, değişim hep 0. Fark modeli 0 öğrenir,
+    # tahmin şimdiki değerin kendisi olur, hata sıfır.
+    df = veri_hazirla(sahte_set(gun_sayisi=3))
+    katlar = geri_test(df, ufuk_dk=30, son_gun=None, hedef_turu="fark")
+    assert katlar[-1]["hatalar"]["model"]["genel"] == 0.0
