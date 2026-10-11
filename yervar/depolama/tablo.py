@@ -5,7 +5,7 @@ grafik çizmek ya da Power BI'da rapor açmak için bunların tek tabloya dönü
 gerekiyor. Bu modül bir günü okur, temizler ve iki Parquet dosyası yazar:
 
     tablo/doluluk/tarih=2026-09-24/doluluk.parquet   ← her 5 dk × her otopark
-    tablo/otoparklar/otoparklar.parquet              ← her otoparkın sabit bilgileri
+    tablo/otoparklar/otoparklar.parquet              ← şimdiye kadar görülen her otopark
 
 İki tabloya ayırmak "yıldız şeması" (star schema) denen düzen: değişen ölçümler
 (doluluk) bir tabloda, değişmeyen nitelikler (ad, ilçe, konum) ayrı tabloda.
@@ -44,6 +44,16 @@ DAMGA = re.compile(r"_(\d{8}T\d{6}Z)\.json\.gz$")
 # "canlı" sayılsın. Veri denetiminde donuk otoparklar tek bir değerde, yarı donuk
 # olanlar 2-3 değerde takılı kalıyordu; 3'ün üstü gerçek bir sensör demek.
 CANLI_ESIK = 3
+
+# Tek tur sıçraması (V-013): önceki ve sonraki tur birbirine yakınken arada tek
+# bir tur ikisinden de çok uzaksa bu araç hareketi değil, veri hatası. Neredeyse
+# hepsi gece 00:00'da (İstanbul) oluyor. Eşikler kesif/06'daki sorguyla aynı:
+# komşular kapasitenin %5'i içinde, sıçrama kapasitenin %30'u (en az 10 araç).
+SICRAMA_KOMSU_ORAN = 0.05
+SICRAMA_ORAN = 0.3
+SICRAMA_EN_AZ = 10
+
+OTOPARKLAR_YOL = "otoparklar/otoparklar.parquet"
 
 
 def gunun_satirlari(depo: YerelDepo | BlobDepo, gun: date) -> list[dict]:
@@ -89,11 +99,36 @@ tekil AS (
     SELECT * FROM dilimli
     QUALIFY row_number() OVER (PARTITION BY zaman_utc, park_id ORDER BY zaman DESC) = 1
 ),
+komsulu AS (
+    -- 3. Her satırın yanına aynı otoparkın bir önceki ve bir sonraki turunu koy.
+    --    ara_once / ara_sonra: komşu tur gerçekten 5 dk uzakta mı? Arada tur
+    --    kaçmışsa karşılaştırma anlamsız, o zaman sıçrama demiyoruz.
+    --    İstanbul 00:00 = UTC 21:00, yani gün ortası; komşular aynı günde.
+    SELECT *,
+        lag(bos)  OVER w                   AS onceki,
+        lead(bos) OVER w                   AS sonraki,
+        zaman_utc - lag(zaman_utc) OVER w  AS ara_once,
+        lead(zaman_utc) OVER w - zaman_utc AS ara_sonra
+    FROM tekil
+    WINDOW w AS (PARTITION BY park_id ORDER BY zaman_utc)
+),
+isaretli AS (
+    -- 4. Tek tur sıçraması (V-013). Günün ilk ve son turunun bir komşusu yok,
+    --    karşılaştırma NULL çıkıyor; coalesce ile onları "sıçrama değil" sayıyoruz.
+    SELECT *,
+        coalesce(
+            ara_once = INTERVAL 5 MINUTE AND ara_sonra = INTERVAL 5 MINUTE
+            AND abs(onceki - sonraki) <= {SICRAMA_KOMSU_ORAN} * kapasite
+            AND abs(bos - onceki) >= greatest({SICRAMA_ORAN} * kapasite, {SICRAMA_EN_AZ}),
+            false) AS sicrama
+    FROM komsulu
+),
 canlilik AS (
-    -- 3. Otoparkın gün içinde kaç farklı değer gösterdiği. Hiç değişmeyen bir
-    --    sayı sensörden değil, sabit bir varsayılandan geliyordur.
-    SELECT park_id, count(DISTINCT bos) AS farkli_deger
-    FROM tekil GROUP BY park_id
+    -- 5. Otoparkın gün içinde kaç farklı değer gösterdiği. Hiç değişmeyen bir
+    --    sayı sensörden değil, sabit bir varsayılandan geliyordur. Sıçramaları
+    --    saymıyoruz: donuk bir otopark gece yarısı hatası yüzünden canlı görünmesin.
+    SELECT park_id, count(DISTINCT bos) FILTER (NOT sicrama) AS farkli_deger
+    FROM isaretli GROUP BY park_id
 )
 SELECT
     t.zaman_utc,
@@ -106,23 +141,53 @@ SELECT
          THEN round((t.kapasite - t.bos) / t.kapasite, 4) END AS doluluk,
     t.acik = 1                                           AS acik,
     c.farkli_deger > {CANLI_ESIK}                        AS canli,
+    t.sicrama,
     -- Satırı silmiyoruz, işaretliyoruz: neyin neden dışlandığı görünür kalsın.
-    (t.bos BETWEEN 0 AND t.kapasite)                     AS gecerli
-FROM tekil t JOIN canlilik c USING (park_id)
+    (t.bos BETWEEN 0 AND t.kapasite) AND NOT t.sicrama   AS gecerli
+FROM isaretli t JOIN canlilik c USING (park_id)
 ORDER BY t.zaman_utc, t.park_id
 """
 
+# Otopark listesi zamanla değişiyor (V-012): İSPARK bazı otoparkları listeden
+# çıkarıyor, yenilerini ekliyor. Eskiden tablo her gün sadece o günün listesiyle
+# yazılıyordu, çıkan otoparkın adı ilçesi kayboluyordu. Artık eski tabloyla
+# bugünün listesi birleşiyor: çıkan otopark kalıyor, son_gorulme'de donuyor.
+ESKI_OTOPARKLAR = """
+CREATE TABLE eski (park_id INTEGER, ad VARCHAR, ilce VARCHAR, tip VARCHAR,
+                   lat DOUBLE, lng DOUBLE, ilk_gorulme TIMESTAMP, son_gorulme TIMESTAMP)
+"""
+
 OTOPARKLAR_SQL = """
--- Her otopark için günün en son görülen bilgileri (ad, ilçe, tip, konum).
+WITH bugun AS (
+    -- Bugün görülen her otoparkın en son bilgisi (ad, ilçe, tip, konum).
+    SELECT
+        park_id,
+        arg_max(ad, zaman)   AS ad,
+        arg_max(ilce, zaman) AS ilce,
+        arg_max(tip, zaman)  AS tip,
+        arg_max(lat, zaman)  AS lat,
+        arg_max(lng, zaman)  AS lng,
+        min(zaman)           AS ilk_gorulme,
+        max(zaman)           AS son_gorulme
+    FROM ham GROUP BY park_id
+),
+hepsi AS (
+    SELECT * FROM bugun
+    UNION ALL BY NAME
+    SELECT * FROM eski
+)
+-- Bilgiyi en son görüldüğü satırdan alıyoruz. Eski bir günü yeniden işlesek
+-- bile daha yeni bir ad ya da konum geri gitmiyor.
 SELECT
     park_id,
-    arg_max(ad, zaman)   AS ad,
-    arg_max(ilce, zaman) AS ilce,
-    arg_max(tip, zaman)  AS tip,
-    arg_max(lat, zaman)  AS lat,
-    arg_max(lng, zaman)  AS lng,
-    max(zaman)           AS son_gorulme
-FROM ham GROUP BY park_id ORDER BY park_id
+    arg_max(ad, son_gorulme)   AS ad,
+    arg_max(ilce, son_gorulme) AS ilce,
+    arg_max(tip, son_gorulme)  AS tip,
+    arg_max(lat, son_gorulme)  AS lat,
+    arg_max(lng, son_gorulme)  AS lng,
+    min(ilk_gorulme)           AS ilk_gorulme,
+    max(son_gorulme)           AS son_gorulme
+FROM hepsi GROUP BY park_id ORDER BY park_id
 """
 
 HAM_SUTUNLAR = {
@@ -132,9 +197,10 @@ HAM_SUTUNLAR = {
 }
 
 
-def tabloya_cevir(satirlar: list[dict], klasor: Path) -> dict:
+def tabloya_cevir(satirlar: list[dict], klasor: Path, eski_otoparklar: Path | None = None) -> dict:
     """Satırları DuckDB'ye yükler, iki Parquet dosyası yazar ve özet döndürür.
 
+    eski_otoparklar: şimdiye kadar biriken otopark tablosu (yoksa None).
     Saf dönüşüm: depoya dokunmaz, sadece verilen klasöre yazar. Test edilebilir.
     """
     # Satırları satır satır INSERT etmek yavaş; tek bir JSON dosyasına yazıp
@@ -146,18 +212,28 @@ def tabloya_cevir(satirlar: list[dict], klasor: Path) -> dict:
 
     con = duckdb.connect()
     con.execute(f"CREATE TABLE ham AS SELECT * FROM read_json('{kaynak}', columns={HAM_SUTUNLAR})")
+
+    con.execute(ESKI_OTOPARKLAR)
+    if eski_otoparklar:
+        tanim = con.execute(f"DESCRIBE SELECT * FROM '{eski_otoparklar}'").fetchall()
+        sutunlar = {satir[0] for satir in tanim}
+        # 0.5 öncesi tabloda ilk_gorulme yok. Onu yok sayıyoruz: zaten bütün günleri
+        # baştan yeniden işleyince tablo doğru hâliyle kuruluyor.
+        if "ilk_gorulme" in sutunlar:
+            con.execute(f"INSERT INTO eski BY NAME SELECT * FROM '{eski_otoparklar}'")
     # zstd: Parquet'in en iyi sıkıştırmalarından biri; okurken de hızlı.
     bicim = "(FORMAT parquet, COMPRESSION zstd)"
     con.execute(f"COPY ({DOLULUK_SQL}) TO '{klasor / 'doluluk.parquet'}' {bicim}")
     con.execute(f"COPY ({OTOPARKLAR_SQL}) TO '{klasor / 'otoparklar.parquet'}' {bicim}")
 
-    tur, satir, canli, gecersiz = con.execute(f"""
+    tur, satir, canli, gecersiz, sicrama = con.execute(f"""
         SELECT count(DISTINCT zaman_utc), count(*), count(DISTINCT park_id) FILTER (canli),
-               count(*) FILTER (NOT gecerli)
+               count(*) FILTER (NOT gecerli), count(*) FILTER (sicrama)
         FROM '{klasor / 'doluluk.parquet'}'
     """).fetchone()
     con.close()
-    return {"tur": tur, "satir": satir, "canli_otopark": canli, "gecersiz_satir": gecersiz}
+    return {"tur": tur, "satir": satir, "canli_otopark": canli,
+            "gecersiz_satir": gecersiz, "sicrama": sicrama}
 
 
 def gunu_isle(ham: YerelDepo | BlobDepo, tablo: YerelDepo | BlobDepo, gun: date) -> None:
@@ -169,19 +245,22 @@ def gunu_isle(ham: YerelDepo | BlobDepo, tablo: YerelDepo | BlobDepo, gun: date)
 
     with tempfile.TemporaryDirectory() as gecici:
         klasor = Path(gecici)
-        ozet = tabloya_cevir(satirlar, klasor)
+        # Biriken otopark tablosu varsa indiriyoruz, bugünün listesiyle birleşecek.
+        eski = None
+        if OTOPARKLAR_YOL in tablo.listele("otoparklar/"):
+            eski = klasor / "eski_otoparklar.parquet"
+            eski.write_bytes(tablo.oku_bayt(OTOPARKLAR_YOL))
+        ozet = tabloya_cevir(satirlar, klasor, eski)
 
         yol = f"doluluk/tarih={gun:%Y-%m-%d}/doluluk.parquet"
         tablo.yaz_bayt(yol, (klasor / "doluluk.parquet").read_bytes())
-        # Otopark bilgileri tek dosya: her işlenen gün en güncel hâliyle üzerine yazar.
-        otoparklar = (klasor / "otoparklar.parquet").read_bytes()
-        tablo.yaz_bayt("otoparklar/otoparklar.parquet", otoparklar)
+        tablo.yaz_bayt(OTOPARKLAR_YOL, (klasor / "otoparklar.parquet").read_bytes())
 
     tamlik = ozet["tur"] / 288 * 100
     gunluk.info(
-        "%s: %d tur (%%%.0f), %d satır, %d canlı otopark, %d geçersiz satır → %s",
+        "%s: %d tur (%%%.0f), %d satır, %d canlı otopark, %d geçersiz satır (%d sıçrama) → %s",
         gun, ozet["tur"], tamlik, ozet["satir"], ozet["canli_otopark"],
-        ozet["gecersiz_satir"], yol,
+        ozet["gecersiz_satir"], ozet["sicrama"], yol,
     )
 
 
