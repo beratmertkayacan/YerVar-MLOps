@@ -1,10 +1,19 @@
 # Çalışma zamanı bağımlılıkları — Docker imajına sadece bunlar girer
-httpx>=0.27
-python-dotenv>=1.0
-azure-identity>=1.17
-azure-storage-blob>=12.20
-duckdb>=1.1
-holidays>=0.60
-pandas>=2.2
-scikit-learn>=1.5
-mlflow>=3.0
+#
+# Sürümler tam sabit (==). ">=" yazınca her kurulum o günün en yeni sürümünü
+# çekiyordu: Mac'te bir sürüm, CI'da başka, Docker imajında başka. İki somut
+# risk:
+#   - MLflow yeni sürümde kayıt veritabanının şemasını kendiliğinden yükseltiyor;
+#     eski sürüm o veritabanını artık açamıyor.
+#   - Model scikit-learn'ün hangi sürümüyle kaydedildiyse o sürümle açılmalı.
+# Yükseltmek istediğimizde burayı bilerek değiştirip testleri çalıştırıyoruz.
+httpx==0.28.1
+python-dotenv==1.2.3
+azure-identity==1.25.3
+azure-storage-blob==12.30.3
+duckdb==1.5.5
+holidays==0.105
+pandas==3.0.6
+scikit-learn==1.9.1
+mlflow==3.16.1
+skops==0.16.0   # MLflow modeli bununla kaydediyor ve açıyor; açıkça yazıyoruz
