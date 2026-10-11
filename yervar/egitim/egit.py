@@ -13,6 +13,10 @@ Rakipler (referans tahminler):
   - simdiki_gibi : X dk sonra da şimdiki gibi olur
   - dun_ayni_saat: X dk sonra dün o saatte ne idiyse o olur
 
+Ortalamaların yanında bir de karne çıkıyor (yervar/degerlendirme/karne.py):
+hata hangi saatte, hangi doluluk bandında, hangi otoparkta; "dolu mu?"
+sorusunu ne kadar bildik.
+
 Çalıştırma:
     DEPO_TURU=blob python -m yervar.egitim.egit --ufuk 15 30 60 120
 Sonuçları görmek:
@@ -31,6 +35,7 @@ from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.inspection import permutation_importance
 
 from yervar import ayarlar
+from yervar.degerlendirme.karne import karne_olustur, karne_yazdir
 from yervar.egitim.bolme import gun_katlari
 from yervar.gunluk import gunluk_al
 from yervar.ozellikler.olustur import ozellik_seti, tablolari_bagla
@@ -59,6 +64,12 @@ GUVENILEN_TIPLER = [
     "sklearn.utils.validation.check_array",
 ]
 OLCULER = ("genel", "sabah_07_10", "neredeyse_dolu")
+
+# Karne için her test satırından sakladığımız sütunlar (tahminlerin yanında).
+KARNE_SUTUNLARI = [
+    "zaman_utc", "park_id", "ilce", "tip", "kapasite",
+    "saat", "hafta_sonu", "doluluk_simdi", "hedef",
+]
 
 
 # --- veri ---------------------------------------------------------------------
@@ -140,6 +151,11 @@ def geri_test(df: pd.DataFrame, ufuk_dk: int, son_gun: int | None) -> list[dict]
             "atilan": [s for s in OZELLIKLER if s not in sutunlar],
             "hatalar": degerlendir(test, tahminler),
             "_model": model, "_sutunlar": sutunlar, "_test": test,
+            # Karne için: gerçek değer ve tahminler yan yana, satır satır.
+            "_tahmin": test[KARNE_SUTUNLARI].assign(
+                t_simdiki=tahminler["simdiki_gibi"], t_dun=tahminler["dun_ayni_saat"],
+                t_model=tahmin,
+            ),
         })
         gunluk.info("ufuk %d dk, test %s: model %.2f, şimdiki gibi %.2f",
                     ufuk_dk, gun.date(), katlar[-1]["hatalar"]["model"]["genel"],
@@ -192,7 +208,20 @@ def deneyi_hazirla() -> None:
     mlflow.set_experiment(DENEY_ADI)
 
 
-def kaydet(ufuk_dk: int, df: pd.DataFrame, katlar: list[dict], onem) -> None:
+def karneyi_kaydet(karne: dict) -> None:
+    """Karne tablolarını CSV olarak, tek sayılık özetleri metrik olarak yazar."""
+    for ad, tablo in karne["tablolar"].items():
+        mlflow.log_text(tablo.to_csv(), f"karne/{ad}.csv")
+    mlflow.log_dict(karne["karar"], "karne/karar.json")
+    mlflow.log_metric("model_sapma", karne["sapma"])
+    mlflow.log_metric("modelin_yenildigi_otopark", karne["modelin_yenildigi_otopark"])
+    for ad in ("simdiki_gibi", "model"):
+        for olcu, deger in karne["karar"][ad].items():
+            if deger is not None:  # olay yoksa oran tanımsız, MLflow'a yazmıyoruz
+                mlflow.log_metric(f"{ad}_{olcu}", deger)
+
+
+def kaydet(ufuk_dk: int, df: pd.DataFrame, katlar: list[dict], onem, karne=None) -> None:
     ort = ortalama(katlar)
     with mlflow.start_run(run_name=f"ufuk-{ufuk_dk}dk"):
         mlflow.set_tags({**git_bilgisi(), "katman": "L3"})
@@ -222,6 +251,8 @@ def kaydet(ufuk_dk: int, df: pd.DataFrame, katlar: list[dict], onem) -> None:
         son_model = model_kur().fit(df[sutunlar], df["hedef"])
         mlflow.sklearn.log_model(son_model, name="model", skops_trusted_types=GUVENILEN_TIPLER)
         mlflow.log_dict({"sutunlar": sutunlar}, "sutunlar.json")
+        if karne:
+            karneyi_kaydet(karne)
 
 
 def yazdir(ufuk_dk: int, katlar: list[dict]) -> None:
@@ -260,7 +291,9 @@ def main() -> None:
             print("  modelin en çok dayandığı sütunlar (son test günü):")
             for ad, d in onem:
                 print(f"    {ad:<22} {d:>6}")
-        kaydet(ufuk, df, katlar, onem)
+        karne = karne_olustur(pd.concat(k["_tahmin"] for k in katlar))
+        karne_yazdir(karne)
+        kaydet(ufuk, df, katlar, onem, karne)
 
     print(f"\nKayıt: {ayarlar.MLFLOW_ADRES}")
     print("Görmek için: mlflow ui --backend-store-uri " + ayarlar.MLFLOW_ADRES)

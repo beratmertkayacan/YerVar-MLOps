@@ -7,6 +7,7 @@ import mlflow
 import pandas as pd
 
 from yervar import ayarlar
+from yervar.degerlendirme.karne import karne_olustur
 from yervar.egitim import egit
 from yervar.egitim.bolme import gun_katlari
 from yervar.egitim.egit import OZELLIKLER, bilgili_sutunlar, geri_test, veri_hazirla
@@ -66,8 +67,12 @@ def test_geri_test_ve_kayit(tmp_path, monkeypatch) -> None:
     assert len(katlar) == 2
     assert set(katlar[0]["hatalar"]) == {"simdiki_gibi", "dun_ayni_saat", "model"}
 
+    karne = karne_olustur(pd.concat(k["_tahmin"] for k in katlar))
+    assert len(karne["tablolar"]["saat"]) == 24
+
     egit.deneyi_hazirla()
-    egit.kaydet(30, df, katlar, onem=None)
+    egit.kaydet(30, df, katlar, onem=None, karne=karne)
     kosular = mlflow.search_runs(experiment_names=[egit.DENEY_ADI])
     assert len(kosular) == 1
     assert "metrics.model_genel" in kosular.columns
+    assert "metrics.model_sapma" in kosular.columns
