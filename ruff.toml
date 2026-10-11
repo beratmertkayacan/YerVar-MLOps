@@ -1,0 +1,10 @@
+# Kod stili kuralları. CI her push'ta bunlarla kontrol ediyor.
+# Kuralları burada sabitliyoruz: ruff'ın varsayılanları sürümden sürüme değişiyor,
+# yeni sürüm bir gün habersizce CI'ı kırmasın.
+line-length = 100
+target-version = "py311"
+
+[lint]
+# E/F: temel hatalar, I: import sırası, UP: eski Python yazımı,
+# B: sık yapılan hatalar, SIM: sadeleştirilebilecek kod
+select = ["E", "F", "I", "UP", "B", "SIM"]
