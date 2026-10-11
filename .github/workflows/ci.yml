@@ -6,7 +6,7 @@
 #   3. Docker imajı derlenebiliyor mu?     (docker build)
 # Biri bile kırmızıysa o commit'i buluta göndermiyoruz.
 #
-# Bu iş sadece kontrol ediyor; Azure'a hiçbir şey göndermiyor, hiçbir sır 
+# Bu iş sadece kontrol ediyor; Azure'a hiçbir şey göndermiyor, hiçbir sır
 # kullanmıyor. Buluta gönderme (CD) ayrı bir iş olacak.
 
 name: CI
@@ -19,12 +19,13 @@ on:
 jobs:
   test:
     name: Stil ve testler
-    runs-on: ubuntu-latest
+    # ubuntu-latest: Sürümü sabitliyoruz,
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      # Docker imajıyla ve senin Mac'inle aynı Python sürümü.
-      - uses: actions/setup-python@v5
+      # Docker imajıyla ve  Mac ile aynı Python sürümü 
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
           cache: pip
@@ -44,9 +45,9 @@ jobs:
 
   imaj:
     name: Docker imajı derleniyor mu
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: test   # testler geçmeden derlemeye uğraşmıyoruz
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: İmajı derle (göndermeden)
         run: docker build -t yervar:ci .
