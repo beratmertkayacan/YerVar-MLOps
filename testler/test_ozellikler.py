@@ -8,8 +8,10 @@ değişmemeli, sadece hedef değişmeli.
 from datetime import date, datetime, timedelta
 
 import duckdb
+import pytest
 
-from yervar.ozellikler.olustur import ozellik_seti
+from yervar import ayarlar
+from yervar.ozellikler.olustur import ozellik_seti, tablolari_bagla
 from yervar.ozellikler.takvim import ozel_donemler, takvim_satirlari, tatil_gunleri
 
 BAS = datetime(2026, 9, 24, 6, 0)  # UTC, İstanbul 09:00
@@ -143,3 +145,11 @@ def test_ozel_donemler_takvime_islenir() -> None:
 def test_ozel_donemler_dosyasi_okunur() -> None:
     turler = {d["tur"] for d in ozel_donemler()}
     assert turler <= {"idari_izin", "okul_tatili"}
+
+
+def test_bulut_icin_hesap_adi_yoksa_acik_hata(monkeypatch) -> None:
+    # Yeni terminalde degiskenler.sh yüklenmeden çalıştırınca ne oluyor?
+    monkeypatch.setattr(ayarlar, "DEPO_TURU", "blob")
+    monkeypatch.setattr(ayarlar, "AZURE_DEPOLAMA_HESABI", "")
+    with pytest.raises(ValueError, match="degiskenler.sh"):
+        tablolari_bagla(duckdb.connect())

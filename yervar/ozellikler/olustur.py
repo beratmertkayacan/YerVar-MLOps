@@ -40,6 +40,12 @@ def tablolari_bagla(con: duckdb.DuckDBPyConnection) -> None:
     kesif/00_baglan_*.sql dosyalarının Python karşılığı.
     """
     if ayarlar.DEPO_TURU == "blob":
+        # hesap adı boşsa DuckDB anlaşılmaz bir bağlantı hatası veriyor
+        if not ayarlar.AZURE_DEPOLAMA_HESABI:
+            raise ValueError(
+                "DEPO_TURU=blob ama AZURE_DEPOLAMA_HESABI boş. "
+                "Önce: source altyapi/degiskenler.sh"
+            )
         # Yerelde az login oturumu, bulutta işin yönetilen kimliği kullanılıyor.
         con.execute(f"""
             CREATE OR REPLACE SECRET yervar (
