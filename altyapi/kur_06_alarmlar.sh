@@ -39,6 +39,15 @@ GRUP_ID=$(az monitor action-group show -n "$EYLEM_GRUBU" -g "$KG" --query id -o 
   echo "HATA: '$EYLEM_GRUBU' eylem grubu yok. Önce portalda oluştur."; exit 1;
 }
 
+# Log alarmları sadece bölgesi "Global" olan eylem gruplarıyla çalışıyor.
+# Portal varsayılan olarak bir bölge (ör. eastus) seçebiliyor; önceden yakalayalım.
+# (tr ile küçük harfe çeviriyoruz: macOS'taki eski bash ${x,,} bilmiyor.)
+GRUP_YERI=$(az monitor action-group show -n "$EYLEM_GRUBU" -g "$KG" --query location -o tsv | tr '[:upper:]' '[:lower:]')
+[ "$GRUP_YERI" = "global" ] || {
+  echo "HATA: '$EYLEM_GRUBU' bölgesi '$GRUP_YERI', 'Global' olmalı. Silip Global olarak yeniden oluştur."
+  exit 1
+}
+
 # Bir kural oluşturur. Varsa dokunmaz.
 #   $1 ad   $2 açıklama   $3 koşul   $4 sorgu   $5 önem (0 kritik ... 4 bilgi)
 kural_kur() {
