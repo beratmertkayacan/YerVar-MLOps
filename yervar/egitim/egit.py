@@ -40,6 +40,7 @@ from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.inspection import permutation_importance
 
 from yervar import ayarlar
+from yervar.degerlendirme.kapsam import kapsam_belirle, kapsam_yazdir, saglik_hesapla
 from yervar.degerlendirme.karne import karne_olustur, karne_yazdir
 from yervar.egitim.bolme import gun_katlari
 from yervar.gunluk import gunluk_al
@@ -243,6 +244,9 @@ def karneyi_kaydet(karne: dict) -> None:
                                     f"{ayarlar.DOLU_EN_FAZLA_ARAC})")
     mlflow.log_metric("model_sapma", karne["sapma"])
     mlflow.log_metric("modelin_yenildigi_otopark", karne["modelin_yenildigi_otopark"])
+    if "kapsam" in karne["tablolar"]:
+        for ad, sayi in karne["tablolar"]["kapsam"]["kapsam"].value_counts().items():
+            mlflow.log_metric(f"kapsam_{ad}", int(sayi))
     for ad in ("simdiki_gibi", "model"):
         for olcu, deger in karne["karar"][ad].items():
             if deger is not None:
@@ -317,6 +321,7 @@ def main() -> None:
     tablolari_bagla(con)
     # karnedeki otopark tablosunda numaranın yanında ad da görünsün
     adlar = con.sql("SELECT park_id, ad FROM otoparklar").df().set_index("park_id")["ad"]
+    saglik = saglik_hesapla(con, bit - timedelta(days=ayarlar.KAPSAM_GUN - 1), bit)
     deneyi_hazirla()
 
     for ufuk in arg.ufuk:
@@ -330,6 +335,9 @@ def main() -> None:
                 print(f"    {ad:<22} {d:>6}")
         karne = karne_olustur(pd.concat(k["_tahmin"] for k in katlar), adlar)
         karne_yazdir(karne)
+        kapsam = kapsam_belirle(saglik, karne["tablolar"]["otopark"])
+        kapsam_yazdir(kapsam)
+        karne["tablolar"]["kapsam"] = kapsam
         kaydet(ufuk, df, katlar, onem, karne, arg.hedef)
 
     print(f"\nKayıt: {ayarlar.MLFLOW_ADRES}")
