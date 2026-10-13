@@ -52,6 +52,10 @@ VERI_BASLANGIC = os.getenv("VERI_BASLANGIC", "2026-09-24")
 # sürede varıyor varsayımı. 5'in katı olmalı, çünkü veri 5 dakikalık.
 TAHMIN_UFKU_DK = int(os.getenv("TAHMIN_UFKU_DK", "30"))
 
+# Model neyi öğreniyor: "seviye" (doluluğun kendisi) ya da "fark" (şimdiki
+# değere göre değişim). Deney 004'te fark dört ufukta da daha iyi çıktı.
+HEDEF_TURU = os.getenv("HEDEF_TURU", "fark")
+
 # Deney takibi (L3)
 # Şimdilik yerel bir dosya. Azure ML'e geçince sadece bu adres değişecek.
 MLFLOW_ADRES = os.getenv(

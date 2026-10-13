@@ -16,7 +16,7 @@ Rakipler (referans tahminler):
 Hedef türü (--hedef):
   - seviye: model doğrudan "X dk sonra doluluk kaç" sorusunu öğrenir
   - fark  : model "X dk içinde doluluk ne kadar değişecek" sorusunu öğrenir,
-            tahmin = şimdiki doluluk + tahmin edilen değişim
+            tahmin = şimdiki doluluk + tahmin edilen değişim (varsayılan)
 
 Ortalamaların yanında bir de karne çıkıyor (yervar/degerlendirme/karne.py):
 hata hangi saatte, hangi doluluk bandında, hangi otoparkta; "dolu mu?"
@@ -147,7 +147,7 @@ def tahmine_cevir(ham: pd.Series, df: pd.DataFrame, hedef_turu: str) -> pd.Serie
     return ham.clip(0, 1)
 
 
-def egit_ve_tahmin_et(egitim: pd.DataFrame, test: pd.DataFrame, hedef_turu: str = "seviye"):
+def egit_ve_tahmin_et(egitim: pd.DataFrame, test: pd.DataFrame, hedef_turu: str = "fark"):
     """Eğitimde işe yarayan sütunlarla modeli kurar, testi tahmin eder."""
     sutunlar = bilgili_sutunlar(egitim)
     model = model_kur()
@@ -157,7 +157,7 @@ def egit_ve_tahmin_et(egitim: pd.DataFrame, test: pd.DataFrame, hedef_turu: str 
 
 
 def geri_test(
-    df: pd.DataFrame, ufuk_dk: int, son_gun: int | None, hedef_turu: str = "seviye"
+    df: pd.DataFrame, ufuk_dk: int, son_gun: int | None, hedef_turu: str = "fark"
 ) -> list[dict]:
     """Her test günü için modeli eğitip üç yöntemi ölçer."""
     katlar = []
@@ -247,7 +247,7 @@ def karneyi_kaydet(karne: dict) -> None:
 
 
 def kaydet(
-    ufuk_dk: int, df: pd.DataFrame, katlar: list[dict], onem, karne=None, hedef_turu="seviye"
+    ufuk_dk: int, df: pd.DataFrame, katlar: list[dict], onem, karne=None, hedef_turu="fark"
 ) -> None:
     ort = ortalama(katlar)
     with mlflow.start_run(run_name=f"ufuk-{ufuk_dk}dk-{hedef_turu}"):
@@ -305,7 +305,7 @@ def main() -> None:
     ap.add_argument("--bitis", type=date.fromisoformat, help="varsayılan: dün (UTC)")
     ap.add_argument("--son-gun", type=int, default=7, help="en fazla kaç gün test edilsin")
     ap.add_argument("--onem", action="store_true", help="sütun önemlerini de hesapla")
-    ap.add_argument("--hedef", choices=["seviye", "fark"], default="seviye",
+    ap.add_argument("--hedef", choices=["seviye", "fark"], default=ayarlar.HEDEF_TURU,
                     help="model seviyeyi mi, değişimi mi öğrensin")
     arg = ap.parse_args()
     bit = arg.bitis or datetime.now(UTC).date() - timedelta(days=1)
