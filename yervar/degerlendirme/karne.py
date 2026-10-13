@@ -63,6 +63,14 @@ def dolu_mu(doluluk: pd.Series, kapasite: pd.Series) -> pd.Series:
     return bos_yer <= dolu_esigi(kapasite)
 
 
+def dolu_kararlari(df: pd.DataFrame) -> dict[str, pd.Series]:
+    """Her yöntemin her satırda "dolu olacak" deyip demediği."""
+    kararlar = {ad: dolu_mu(df[sutun], df["kapasite"]) for ad, sutun in YONTEMLER.items()}
+    if "t_olasilik" in df:
+        kararlar["olasilik"] = df["t_olasilik"] >= ayarlar.DOLU_OLASILIK_ESIGI
+    return kararlar
+
+
 def karar_olculeri(df: pd.DataFrame) -> dict:
     """yakalama: gerçek dolu anların yüzde kaçı bilindi.
     isabet: "dolu" denen anların yüzde kaçı doğru çıktı.
@@ -72,8 +80,7 @@ def karar_olculeri(df: pd.DataFrame) -> dict:
     gercek = dolu_mu(df["hedef"], kapasite)
     dolma_ani = ~dolu_mu(df["doluluk_simdi"], kapasite) & gercek
     sonuc = {"dolu_an": int(gercek.sum()), "dolma_ani": int(dolma_ani.sum())}
-    for ad, sutun in YONTEMLER.items():
-        dedi = dolu_mu(df[sutun], kapasite)
+    for ad, dedi in dolu_kararlari(df).items():
         bildi = dedi & gercek
         sonuc[ad] = {
             "yakalama": _yuzde(bildi.sum(), gercek.sum()),
@@ -88,6 +95,38 @@ def _yuzde(pay: int, payda: int) -> float | None:
     return round(100 * pay / payda, 1) if payda else None
 
 
+def olasilik_olculeri(df: pd.DataFrame) -> dict:
+    """Brier puanı: olasılık ile gerçekleşen (0 ya da 1) arasındaki farkın
+    karesinin ortalaması. 0 mükemmel, küçük olan iyi.
+
+    Basit tahmin için olasılık 0 ya da 1: şu an doluysa 1, değilse 0.
+    """
+    gercek = dolu_mu(df["hedef"], df["kapasite"]).astype(float)
+    simdi = dolu_mu(df["doluluk_simdi"], df["kapasite"]).astype(float)
+    return {
+        "brier_simdiki_gibi": round(float(((simdi - gercek) ** 2).mean()), 4),
+        "brier_olasilik": round(float(((df["t_olasilik"] - gercek) ** 2).mean()), 4),
+    }
+
+
+def kalibrasyon(df: pd.DataFrame) -> pd.DataFrame:
+    """Olasılığı 10 dilime bölüp her dilimde gerçekten kaçının dolu çıktığı.
+
+    Model %70 dediği anların yaklaşık %70'inde dolu çıkmalı. ort_olasilik ile
+    gercek_oran birbirine yakınsa model kalibre.
+    """
+    gercek = dolu_mu(df["hedef"], df["kapasite"]).astype(float)
+    dilim = pd.cut(df["t_olasilik"], [i / 10 for i in range(11)], include_lowest=True)
+    g = pd.DataFrame({"olasilik": df["t_olasilik"], "gercek": gercek}).groupby(
+        dilim, observed=True
+    )
+    return pd.DataFrame({
+        "satir": g.size(),
+        "ort_olasilik": g["olasilik"].mean().round(3),
+        "gercek_oran": g["gercek"].mean().round(3),
+    })
+
+
 def sapma(df: pd.DataFrame) -> float:
     """Ortalama (tahmin - gerçek), puan. Artı: fazla dolu tahmin."""
     return round(100 * (df["t_model"] - df["hedef"]).mean(), 2)
@@ -96,7 +135,7 @@ def sapma(df: pd.DataFrame) -> float:
 def karne_olustur(tahminler: pd.DataFrame, adlar: pd.Series | None = None) -> dict:
     df = hatalari_ekle(tahminler)
     otoparklar = otopark_kirilimi(df, adlar)
-    return {
+    karne = {
         "tablolar": {
             "saat": kirilim(df, "saat"),
             "bant": kirilim(df, "bant"),
@@ -108,6 +147,10 @@ def karne_olustur(tahminler: pd.DataFrame, adlar: pd.Series | None = None) -> di
         "modelin_yenildigi_otopark": int((otoparklar["fark"] < 0).sum()),
         "otopark_sayisi": len(otoparklar),
     }
+    if "t_olasilik" in df:
+        karne["olasilik"] = olasilik_olculeri(df)
+        karne["tablolar"]["kalibrasyon"] = kalibrasyon(df)
+    return karne
 
 
 def karne_yazdir(karne: dict) -> None:
@@ -128,7 +171,11 @@ def karne_yazdir(karne: dict) -> None:
 
     k = karne["karar"]
     print(f"  dolu: {k['dolu_an']} an, {k['dolma_ani']} dolma anı")
-    for ad in YONTEMLER:
+    for ad in [a for a in k if isinstance(k[a], dict)]:
         o = {olcu: "yok" if v is None else f"%{v}" for olcu, v in k[ad].items()}
         print(f"    {ad:<13} yakalama {o['yakalama']}  isabet {o['isabet']}  "
               f"dolma anı {o['dolma_ani_yakalama']}")
+    if "olasilik" in karne:
+        b = karne["olasilik"]
+        print(f"  brier (küçük iyi): şimdiki gibi {b['brier_simdiki_gibi']}, "
+              f"olasılık modeli {b['brier_olasilik']}")

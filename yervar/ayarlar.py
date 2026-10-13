@@ -68,6 +68,10 @@ DOLU_EN_FAZLA_ARAC = int(os.getenv("DOLU_EN_FAZLA_ARAC", "10"))
 KAPSAM_GUN = int(os.getenv("KAPSAM_GUN", "7"))
 SAGLIKLI_CANLI_ORAN = float(os.getenv("SAGLIKLI_CANLI_ORAN", "0.8"))
 
+# Olasılık modeli bu değerin üstünde bir olasılık verirse "dolu olacak" diyoruz.
+# Şimdilik 0.5; kalibrasyona bakıp sonra ayarlanacak.
+DOLU_OLASILIK_ESIGI = float(os.getenv("DOLU_OLASILIK_ESIGI", "0.5"))
+
 # Deney takibi (L3)
 # Şimdilik yerel bir dosya. Azure ML'e geçince sadece bu adres değişecek.
 MLFLOW_ADRES = os.getenv(

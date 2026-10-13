@@ -43,6 +43,7 @@ from yervar import ayarlar
 from yervar.degerlendirme.kapsam import kapsam_belirle, kapsam_yazdir, saglik_hesapla
 from yervar.degerlendirme.karne import karne_olustur, karne_yazdir
 from yervar.egitim.bolme import gun_katlari
+from yervar.egitim.olasilik import olasilik_modeli_kur, olasilik_tahmin_et
 from yervar.gunluk import gunluk_al
 from yervar.ozellikler.olustur import ozellik_seti, tablolari_bagla
 
@@ -164,6 +165,7 @@ def geri_test(
     katlar = []
     for gun, egitim, test in gun_katlari(df, ufuk_dk, son_gun=son_gun):
         model, sutunlar, tahmin = egit_ve_tahmin_et(egitim, test, hedef_turu)
+        _, olasilik = olasilik_tahmin_et(egitim, test, sutunlar, MODEL_AYARLARI)
         tahminler = {
             "simdiki_gibi": test["doluluk_simdi"],
             # dün değeri yoksa şimdikini kullan, yoksa satırı ölçemeyiz
@@ -180,7 +182,7 @@ def geri_test(
             # karne için gerçek değer ve tahminler
             "_tahmin": test[KARNE_SUTUNLARI].assign(
                 t_simdiki=tahminler["simdiki_gibi"], t_dun=tahminler["dun_ayni_saat"],
-                t_model=tahmin,
+                t_model=tahmin, t_olasilik=olasilik,
             ),
         })
         gunluk.info("ufuk %d dk, test %s: model %.2f, şimdiki gibi %.2f",
@@ -244,11 +246,13 @@ def karneyi_kaydet(karne: dict) -> None:
                                     f"{ayarlar.DOLU_EN_FAZLA_ARAC})")
     mlflow.log_metric("model_sapma", karne["sapma"])
     mlflow.log_metric("modelin_yenildigi_otopark", karne["modelin_yenildigi_otopark"])
+    for ad, deger in karne.get("olasilik", {}).items():
+        mlflow.log_metric(ad, deger)
     if "kapsam" in karne["tablolar"]:
         for ad, sayi in karne["tablolar"]["kapsam"]["kapsam"].value_counts().items():
             mlflow.log_metric(f"kapsam_{ad}", int(sayi))
-    for ad in ("simdiki_gibi", "model"):
-        for olcu, deger in karne["karar"][ad].items():
+    for ad in ("simdiki_gibi", "model", "olasilik"):
+        for olcu, deger in karne["karar"].get(ad, {}).items():
             if deger is not None:
                 mlflow.log_metric(f"{ad}_{olcu}", deger)
 
@@ -287,6 +291,12 @@ def kaydet(
         son_model = model_kur().fit(df[sutunlar], ogrenme_hedefi(df, hedef_turu))
         mlflow.sklearn.log_model(son_model, name="model", skops_trusted_types=GUVENILEN_TIPLER)
         mlflow.log_dict({"sutunlar": sutunlar}, "sutunlar.json")
+        # ikinci model: dolu olma olasılığı, aynı sütunlarla
+        olasilik_modeli = olasilik_modeli_kur(df, sutunlar, MODEL_AYARLARI)
+        if olasilik_modeli is not None:
+            mlflow.sklearn.log_model(
+                olasilik_modeli, name="model_olasilik", skops_trusted_types=GUVENILEN_TIPLER
+            )
         if karne:
             karneyi_kaydet(karne)
 
