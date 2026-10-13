@@ -56,6 +56,13 @@ TAHMIN_UFKU_DK = int(os.getenv("TAHMIN_UFKU_DK", "30"))
 # değere göre değişim). Deney 004'te fark dört ufukta da daha iyi çıktı.
 HEDEF_TURU = os.getenv("HEDEF_TURU", "fark")
 
+# Değerlendirme (L4)
+# Otopark ne zaman "dolu" sayılır. Boş yer sayısına bakıyoruz: kapasitenin
+# %5'i kadar ya da daha az yer kaldıysa doluyuz, ama bu sayı 10 aracı geçemez.
+# Sadece oranla gidince 5.000 araçlık otoparkta 250 boş yer "dolu" oluyordu (karar 004).
+DOLU_ORAN = float(os.getenv("DOLU_ORAN", "0.05"))
+DOLU_EN_FAZLA_ARAC = int(os.getenv("DOLU_EN_FAZLA_ARAC", "10"))
+
 # Deney takibi (L3)
 # Şimdilik yerel bir dosya. Azure ML'e geçince sadece bu adres değişecek.
 MLFLOW_ADRES = os.getenv(

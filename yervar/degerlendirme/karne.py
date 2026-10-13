@@ -4,15 +4,13 @@ Girdi, geri testin bütün günlerini içeren tek tablo: her satırda gerçek de
 (hedef) ve yöntemlerin tahminleri (t_simdiki, t_model).
 
 Kırılımlar: saat, doluluk bandı, gün tipi, otopark.
-Karar ölçüleri: hedef DOLU_ESIK ve üstündeyse otopark dolu sayılır.
+Karar ölçüleri: otopark dolu mu, dolu_mu() fonksiyonuna göre.
 Dolma anı: şu an dolu değil, ufuk sonra dolu.
 """
 
 import pandas as pd
 
-# Herkes için aynı eşik. Büyük otoparklarda %95 hâlâ çok sayıda boş yer demek;
-# uygulama aşamasında boş yer sayısına göre tekrar bakılacak.
-DOLU_ESIK = 0.95
+from yervar import ayarlar
 
 BANT_SINIRLARI = [0, 0.5, 0.75, 0.9, 1.01]  # 1.0 son banda girsin diye 1.01
 BANT_ADLARI = ["%0-50", "%50-75", "%75-90", "%90-100"]
@@ -54,16 +52,28 @@ def otopark_kirilimi(df: pd.DataFrame, adlar: pd.Series | None = None) -> pd.Dat
     return tablo.sort_values("model", ascending=False)
 
 
-def karar_olculeri(df: pd.DataFrame, esik: float = DOLU_ESIK) -> dict:
+def dolu_esigi(kapasite: pd.Series) -> pd.Series:
+    """Kaç boş yer kalınca dolu sayılıyor. 20 araçlıkta 1, 100'lükte 5, 200 ve üstünde 10."""
+    return (kapasite * ayarlar.DOLU_ORAN).clip(upper=ayarlar.DOLU_EN_FAZLA_ARAC)
+
+
+def dolu_mu(doluluk: pd.Series, kapasite: pd.Series) -> pd.Series:
+    # doluluk 4 basamağa yuvarlanmış geliyor, boş yeri tam sayıya yuvarlayıp karşılaştırıyoruz
+    bos_yer = ((1 - doluluk) * kapasite).round()
+    return bos_yer <= dolu_esigi(kapasite)
+
+
+def karar_olculeri(df: pd.DataFrame) -> dict:
     """yakalama: gerçek dolu anların yüzde kaçı bilindi.
     isabet: "dolu" denen anların yüzde kaçı doğru çıktı.
     dolma_ani_yakalama: şu an boş yeri olup ufuk sonra dolanların yüzde kaçı bilindi.
     """
-    gercek = df["hedef"] >= esik
-    dolma_ani = (df["doluluk_simdi"] < esik) & gercek
+    kapasite = df["kapasite"]
+    gercek = dolu_mu(df["hedef"], kapasite)
+    dolma_ani = ~dolu_mu(df["doluluk_simdi"], kapasite) & gercek
     sonuc = {"dolu_an": int(gercek.sum()), "dolma_ani": int(dolma_ani.sum())}
     for ad, sutun in YONTEMLER.items():
-        dedi = df[sutun] >= esik
+        dedi = dolu_mu(df[sutun], kapasite)
         bildi = dedi & gercek
         sonuc[ad] = {
             "yakalama": _yuzde(bildi.sum(), gercek.sum()),
@@ -117,7 +127,7 @@ def karne_yazdir(karne: dict) -> None:
           f"{karne['modelin_yenildigi_otopark']}/{karne['otopark_sayisi']}")
 
     k = karne["karar"]
-    print(f"  dolu (%{DOLU_ESIK * 100:.0f}+): {k['dolu_an']} an, {k['dolma_ani']} dolma anı")
+    print(f"  dolu: {k['dolu_an']} an, {k['dolma_ani']} dolma anı")
     for ad in YONTEMLER:
         o = {olcu: "yok" if v is None else f"%{v}" for olcu, v in k[ad].items()}
         print(f"    {ad:<13} yakalama {o['yakalama']}  isabet {o['isabet']}  "

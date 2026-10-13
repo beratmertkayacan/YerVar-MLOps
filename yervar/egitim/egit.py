@@ -238,6 +238,9 @@ def karneyi_kaydet(karne: dict) -> None:
     for ad, tablo in karne["tablolar"].items():
         mlflow.log_text(tablo.to_csv(), f"karne/{ad}.csv")
     mlflow.log_dict(karne["karar"], "karne/karar.json")
+    # dolu tanımı değişirse eski koşularla karar ölçüleri karşılaştırılamaz
+    mlflow.log_param("dolu_tanimi", f"bos<=min(kapasite*{ayarlar.DOLU_ORAN},"
+                                    f"{ayarlar.DOLU_EN_FAZLA_ARAC})")
     mlflow.log_metric("model_sapma", karne["sapma"])
     mlflow.log_metric("modelin_yenildigi_otopark", karne["modelin_yenildigi_otopark"])
     for ad in ("simdiki_gibi", "model"):
