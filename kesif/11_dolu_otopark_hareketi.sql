@@ -8,7 +8,11 @@
 -- ölçümde boş yer artmış mı, ne sıklıkla artıyor. Sonuçlar
 -- belgeler/karar-004-dolu-otopark-hareketi.md dosyasına yazılacak.
 --
--- Dolu dediğimiz doluluğun %95 ve üstü olması, karnedeki eşikle aynı.
+-- Dolu tanımı (13 Ekim'de değişti): boş yer kapasitenin %5'i ya da daha az,
+-- ama en fazla 10 araç. İlk çalıştırmada doluluk %95 ve üstünü dolu saymıştık;
+-- 5.000 araçlık otoparkta bu 250 boş yer demekti. Tanım yervar/ayarlar.py
+-- içindeki DOLU_ORAN ve DOLU_EN_FAZLA_ARAC ile aynı tutulmalı.
+CREATE OR REPLACE TEMP MACRO dolu(bos, kapasite) AS bos <= least(kapasite * 0.05, 10);
 
 
 -- Her ölçümün yanına aynı otoparkın bir sonraki ölçümünü koyuyoruz.
@@ -23,11 +27,19 @@ WHERE tarih >= DATE '2026-09-24' AND canli AND gecerli AND acik
 WINDOW w AS (PARTITION BY park_id ORDER BY zaman_utc);
 
 
+-- 0. Eski ve yeni tanım farkı: ikisinden birine göre dolu olan ölçümler.
+SELECT count(*) FILTER (WHERE doluluk >= 0.95)                            AS eski_tanim,
+       count(*) FILTER (WHERE dolu(bos, kapasite))                        AS yeni_tanim,
+       count(*) FILTER (WHERE doluluk >= 0.95 AND NOT dolu(bos, kapasite)) AS artik_dolu_degil,
+       count(DISTINCT park_id) FILTER (WHERE doluluk >= 0.95 AND NOT dolu(bos, kapasite)) AS etkilenen_otopark
+FROM ardisik;
+
+
 -- 1. Genel durum: kaç otopark en az bir kez doluyor, ölçümlerin ne kadarı dolu.
 SELECT count(DISTINCT park_id)                                  AS canli_otopark,
-       count(DISTINCT park_id) FILTER (WHERE doluluk >= 0.95)   AS en_az_bir_kez_dolan,
-       count(*) FILTER (WHERE doluluk >= 0.95)                  AS dolu_olcum,
-       round(100 * count(*) FILTER (WHERE doluluk >= 0.95) / count(*), 1) AS dolu_olcum_yuzde
+       count(DISTINCT park_id) FILTER (WHERE dolu(bos, kapasite))   AS en_az_bir_kez_dolan,
+       count(*) FILTER (WHERE dolu(bos, kapasite))                  AS dolu_olcum,
+       round(100 * count(*) FILTER (WHERE dolu(bos, kapasite)) / count(*), 1) AS dolu_olcum_yuzde
 FROM ardisik;
 
 
@@ -37,22 +49,22 @@ FROM ardisik;
 --   dolu_iken_degisim: doluyken 5 dk içinde boş yer ortalama kaç araç oynuyor
 -- En az 50 dolu ölçümü olanlar (yaklaşık 4 saat). Daha azında oran güvenilmez.
 SELECT a.park_id, o.ad, o.tip, a.kapasite,
-       count(*) FILTER (WHERE doluluk >= 0.95)                              AS dolu_olcum,
-       round(100 * count(*) FILTER (WHERE doluluk >= 0.95) / count(*), 1)   AS dolu_yuzde,
+       count(*) FILTER (WHERE dolu(bos, kapasite))                              AS dolu_olcum,
+       round(100 * count(*) FILTER (WHERE dolu(bos, kapasite)) / count(*), 1)   AS dolu_yuzde,
        round(100 * avg(CASE WHEN sonraki_bos > bos THEN 1 ELSE 0 END)
-             FILTER (WHERE doluluk >= 0.95 AND ara = INTERVAL 5 MINUTE), 1) AS dolu_iken_yer_acilma,
+             FILTER (WHERE dolu(bos, kapasite) AND ara = INTERVAL 5 MINUTE), 1) AS dolu_iken_yer_acilma,
        round(avg(abs(sonraki_bos - bos))
-             FILTER (WHERE doluluk >= 0.95 AND ara = INTERVAL 5 MINUTE), 2) AS dolu_iken_degisim
+             FILTER (WHERE dolu(bos, kapasite) AND ara = INTERVAL 5 MINUTE), 2) AS dolu_iken_degisim
 FROM ardisik a JOIN otoparklar o USING (park_id)
 GROUP BY ALL
-HAVING count(*) FILTER (WHERE doluluk >= 0.95) >= 50
+HAVING count(*) FILTER (WHERE dolu(bos, kapasite)) >= 50
 ORDER BY dolu_olcum DESC;
 
 
 -- 3. Dolu ölçümler günün hangi saatlerinde.
 SELECT hour(zaman_ist)                                        AS saat,
-       count(*) FILTER (WHERE doluluk >= 0.95)                AS dolu_olcum,
-       count(DISTINCT park_id) FILTER (WHERE doluluk >= 0.95) AS otopark
+       count(*) FILTER (WHERE dolu(bos, kapasite))                AS dolu_olcum,
+       count(DISTINCT park_id) FILTER (WHERE dolu(bos, kapasite)) AS otopark
 FROM ardisik
 GROUP BY saat ORDER BY saat;
 
@@ -64,11 +76,11 @@ GROUP BY saat ORDER BY saat;
 --   dolu_kaliyor: %10'dan az
 WITH park AS (
     SELECT park_id,
-           count(*) FILTER (WHERE doluluk >= 0.95) AS dolu_olcum,
+           count(*) FILTER (WHERE dolu(bos, kapasite)) AS dolu_olcum,
            100 * avg(CASE WHEN sonraki_bos > bos THEN 1 ELSE 0 END)
-               FILTER (WHERE doluluk >= 0.95 AND ara = INTERVAL 5 MINUTE) AS acilma
+               FILTER (WHERE dolu(bos, kapasite) AND ara = INTERVAL 5 MINUTE) AS acilma
     FROM ardisik GROUP BY park_id
-    HAVING count(*) FILTER (WHERE doluluk >= 0.95) >= 50
+    HAVING count(*) FILTER (WHERE dolu(bos, kapasite)) >= 50
 )
 SELECT CASE WHEN acilma > 40 THEN 'sik_aciliyor'
             WHEN acilma >= 10 THEN 'ara_sira'
@@ -172,4 +184,27 @@ FROM park GROUP BY grup ORDER BY grup;
 --│ ara_sira     │      27 │       19.5 │
 --│ dolu_kaliyor │      35 │        5.0 │
 --│ sik_aciliyor │       4 │       45.9 │
+--└──────────────┴─────────┴────────────┘
+
+
+--Latest output:
+--┌────────────┬────────────┬──────────────────┬───────────────────┐
+--│ eski_tanim │ yeni_tanim │ artik_dolu_degil │ etkilenen_otopark │
+--│   int64    │   int64    │      int64       │       int64       │
+--├────────────┼────────────┼──────────────────┼───────────────────┤
+--│      65335 │      55188 │            10147 │                23 │
+--└────────────┴────────────┴──────────────────┴───────────────────┘
+--┌───────────────┬─────────────────────┬────────────┬──────────────────┐
+--│ canli_otopark │ en_az_bir_kez_dolan │ dolu_olcum │ dolu_olcum_yuzde │
+--│     int64     │        int64        │   int64    │      double      │
+--├───────────────┼─────────────────────┼────────────┼──────────────────┤
+--│           130 │                  79 │      55188 │             11.4 │
+--└───────────────┴─────────────────────┴────────────┴──────────────────┘
+--┌──────────────┬─────────┬────────────┐
+--│     grup     │ otopark │ ort_acilma │
+--│   varchar    │  int64  │   double   │
+--├──────────────┼─────────┼────────────┤
+--│ ara_sira     │      25 │       17.7 │
+--│ dolu_kaliyor │      37 │        4.6 │
+--│ sik_aciliyor │       3 │       46.4 │
 --└──────────────┴─────────┴────────────┘
