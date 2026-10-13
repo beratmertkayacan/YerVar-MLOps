@@ -47,6 +47,8 @@ def otopark_kirilimi(df: pd.DataFrame, adlar: pd.Series | None = None) -> pd.Dat
     tablo = kirilim(df, "park_id")
     bilgi = df.groupby("park_id", observed=True)[["ilce", "tip", "kapasite"]].first()
     tablo = tablo.join(bilgi)
+    # puan küçük otoparkta abartılı, büyükte küçük görünüyor; araç olarak da göster
+    tablo["model_arac"] = (tablo["model"] * tablo["kapasite"] / 100).round(1)
     if adlar is not None:
         tablo.insert(0, "ad", [adlar.get(p) for p in tablo.index])
     return tablo.sort_values("model", ascending=False)

@@ -59,3 +59,4 @@ def test_modelin_yenildigi_otopark_sayilir() -> None:
     otoparklar = karne["tablolar"]["otopark"]
     assert otoparklar.index[0] == 1   # en kötü otopark en üstte
     assert otoparklar["ad"].tolist() == ["Birinci", "İkinci"]
+    assert otoparklar.loc[1, "model_arac"] == 10.0   # 10 puan, kapasite 100
