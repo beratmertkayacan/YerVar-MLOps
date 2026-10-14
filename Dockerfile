@@ -25,6 +25,14 @@ RUN pip install --no-cache-dir -r gereksinimler.txt
 COPY --chown=yervar:yervar yervar/ ./yervar/
 RUN mkdir veri && chown yervar:yervar veri
 
+# Kod sürümü derleme sırasında dışarıdan veriliyor (kur_02: --build-arg).
+# Toplayıcı bunu her log satırına ve blob meta verisine yazıyor; buluttaki
+# bir dosyanın hangi koddan çıktığı böyle anlaşılıyor. Dosyanın sonuna
+# yakın duruyor: değeri her commit'te değiştiği için üstündeki katmanlar
+# (pip install) önbellekten gelmeye devam ediyor.
+ARG KOD_SURUMU=yerel
+ENV KOD_SURUMU=$KOD_SURUMU
+
 # Konteyner root yetkisiyle çalışmasın: bir açık olursa etkisi sınırlı kalır.
 USER yervar
 
