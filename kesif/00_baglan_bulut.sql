@@ -24,6 +24,11 @@ CREATE OR REPLACE VIEW doluluk AS
     SELECT * FROM read_parquet('az://tablo/doluluk/**/*.parquet', hive_partitioning = true);
 CREATE OR REPLACE VIEW otoparklar AS
     SELECT * FROM 'az://tablo/otoparklar/otoparklar.parquet';
+-- Günlük özet (Adım 2): her işlenen gün için tek satır; tamlık, canlı otopark,
+-- atlanan dosya, hatali sayısı, kod sürümü. Tarih klasör adından geliyor.
+-- Henüz hiç özet yoksa bu satır "No files found" der; diğer görünümler etkilenmez.
+CREATE OR REPLACE VIEW ozet AS
+    SELECT * FROM read_parquet('az://tablo/ozet/**/*.parquet', hive_partitioning = true);
 
 -- Kontrol 1: Kapta hangi dosyalar var? Her gün için bir doluluk dosyası ve tek bir otoparklar dosyası görmeliyiz.
 SELECT file FROM glob('az://tablo/**/*.parquet') ORDER BY file;

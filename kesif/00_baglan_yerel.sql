@@ -10,6 +10,11 @@ CREATE OR REPLACE VIEW doluluk AS
     SELECT * FROM read_parquet('veri/tablo/doluluk/**/*.parquet', hive_partitioning = true);
 CREATE OR REPLACE VIEW otoparklar AS
     SELECT * FROM 'veri/tablo/otoparklar/otoparklar.parquet';
+-- Günlük özet (Adım 2): her işlenen gün için tek satır; tamlık, canlı otopark,
+-- atlanan dosya, hatali sayısı, kod sürümü. Tarih klasör adından geliyor.
+-- Henüz hiç özet yoksa bu satır "No files found" der; diğer görünümler etkilenmez.
+CREATE OR REPLACE VIEW ozet AS
+    SELECT * FROM read_parquet('veri/tablo/ozet/**/*.parquet', hive_partitioning = true);
 
 -- Hangi günler var?
 SELECT tarih, count(DISTINCT zaman_utc) AS tur, count(*) AS satir

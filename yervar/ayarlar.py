@@ -54,6 +54,20 @@ AZURE_DEPOLAMA_HESABI = os.getenv("AZURE_DEPOLAMA_HESABI", "")
 AZURE_KAP = os.getenv("AZURE_KAP", "ham")        # ham turlar (L0 yazar)
 TABLO_KAP = os.getenv("TABLO_KAP", "tablo")      # günlük tablolar (L1 yazar)
 
+# Gece tablo işi (L1)
+# Bir günün dosyalarının en fazla bu oranı okunamazsa gün yine yazılır. Toplayıcı
+# Adım 1'den beri sadece doğrulanmış tur yazıyor; tek tük bozuk dosya beklenmez
+# ama günü düşürmesin. Oran aşılırsa sorun sistematiktir, gün yarım yazılmaz.
+ATLANAN_DOSYA_ORANI_EN_FAZLA = float(os.getenv("ATLANAN_DOSYA_ORANI_EN_FAZLA", "0.05"))
+# Varsayılan çalıştırma son bu kadar günde eksik kalanları da tamamlar.
+TAMAMLAMA_GUN = int(os.getenv("TAMAMLAMA_GUN", "7"))
+# Bir çalıştırmada en fazla bu kadar gün (dün dahil); kalanı sonraki geceye.
+EN_FAZLA_GUN = int(os.getenv("EN_FAZLA_GUN", "4"))
+# Bu kadar saniye geçtiyse yeni bir güne başlanmaz. İşin süre sınırı 1800 sn.
+TABLO_SURE_BUTCESI_SN = float(os.getenv("TABLO_SURE_BUTCESI_SN", "1200"))
+# Tamlık (yüzde) bunun altındaysa GUN_EKSIK uyarısı yazılır, iş başarısız olmaz.
+GUN_EKSIK_ESIGI = float(os.getenv("GUN_EKSIK_ESIGI", "95"))
+
 # Özellikler (L2)
 # Referans başlangıç günü. Veri bu günden itibaren bulutta, boşluksuz toplanıyor.
 # Öncesi Mac dönemi (22-23 Eylül): uyku boşlukları var, analize ve eğitime girmez.
