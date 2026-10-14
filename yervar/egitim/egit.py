@@ -296,12 +296,14 @@ def kaydet(
         son_model = model_kur().fit(df[sutunlar], ogrenme_hedefi(df, hedef_turu))
         mlflow.sklearn.log_model(son_model, name="model", skops_trusted_types=GUVENILEN_TIPLER)
         mlflow.log_dict({"sutunlar": sutunlar}, "sutunlar.json")
-        # ikinci model: dolu olma olasılığı, aynı sütunlarla
-        olasilik_modeli = olasilik_modeli_kur(df, sutunlar, MODEL_AYARLARI)
+        # ikinci model: dolu olma olasılığı
+        olasilik_modeli, olasilik_sutunlari = olasilik_modeli_kur(df, sutunlar, MODEL_AYARLARI)
         if olasilik_modeli is not None:
             mlflow.sklearn.log_model(
                 olasilik_modeli, name="model_olasilik", skops_trusted_types=GUVENILEN_TIPLER
             )
+            # iki modelin sütunları farklı olabilir, canlıda ikisi de lazım
+            mlflow.log_dict({"sutunlar": olasilik_sutunlari}, "sutunlar_olasilik.json")
         if karne:
             karneyi_kaydet(karne)
 

@@ -81,7 +81,8 @@ def test_yeterli_gun_varsa_kalibre_edilir(monkeypatch) -> None:
     sutunlar = ["saat", "doluluk_simdi"]
 
     # 3 gün: ilk 2 günle eğitim, son günle kalibrasyon
-    assert isinstance(olasilik_modeli_kur(df, sutunlar, {"max_iter": 20}), CalibratedClassifierCV)
+    model, _ = olasilik_modeli_kur(df, sutunlar, {"max_iter": 20})
+    assert isinstance(model, CalibratedClassifierCV)
 
 
 def test_gun_yetmezse_kalibrasyonsuz(monkeypatch) -> None:
@@ -89,5 +90,22 @@ def test_gun_yetmezse_kalibrasyonsuz(monkeypatch) -> None:
     df = veri_hazirla(dolulu_set())
 
     # 3 günlük veride 5 gün ayrılamaz, düz model dönüyor
-    model = olasilik_modeli_kur(df, ["saat", "doluluk_simdi"], {"max_iter": 20})
+    model, _ = olasilik_modeli_kur(df, ["saat", "doluluk_simdi"], {"max_iter": 20})
     assert not isinstance(model, CalibratedClassifierCV)
+
+
+def test_ilk_gunlerde_bos_sutun_atilir(monkeypatch) -> None:
+    # Gerçekte yaşanan hata: "geçen hafta" sütunu ilk günlerde tamamen boş.
+    # Kalibrasyon için son gün ayrılınca kalan kısımda bu sütunla model kurulamıyordu.
+    monkeypatch.setattr(ayarlar, "KALIBRASYON_GUN", 1)
+    df = veri_hazirla(dolulu_set())
+    son_gun = df["zaman_utc"].dt.normalize().max()
+    df["doluluk_gecen_hafta"] = float("nan")
+    df.loc[df["zaman_utc"] >= son_gun, "doluluk_gecen_hafta"] = df["doluluk_simdi"]
+
+    model, sutunlar = olasilik_modeli_kur(
+        df, ["saat", "doluluk_simdi", "doluluk_gecen_hafta"], {"max_iter": 20}
+    )
+
+    assert isinstance(model, CalibratedClassifierCV)
+    assert sutunlar == ["saat", "doluluk_simdi"]

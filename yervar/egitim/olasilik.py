@@ -27,6 +27,16 @@ def dolu_hedefi(df: pd.DataFrame) -> pd.Series:
     return dolu_mu(df["hedef"], df["kapasite"]).astype(int)
 
 
+def dolu_sutunlar(df: pd.DataFrame, sutunlar: list[str]) -> list[str]:
+    """Bu veride en az iki farklı değeri olan sütunlar.
+
+    Kalibrasyon için son günleri ayırınca kalan kısımda bazı sütunlar tamamen
+    boş kalabiliyor. Örnek: veri 24 Eylül'de başlıyor, "geçen hafta" sütunu
+    ancak 1 Ekim'den sonra dolu. Boş sütunla model kurulamıyor.
+    """
+    return [s for s in sutunlar if df[s].nunique(dropna=True) > 1]
+
+
 def siniflandirici(egitim: pd.DataFrame, sutunlar: list[str], model_ayarlari: dict):
     model = HistGradientBoostingClassifier(
         **model_ayarlari, categorical_features="from_dtype", random_state=0
@@ -35,32 +45,34 @@ def siniflandirici(egitim: pd.DataFrame, sutunlar: list[str], model_ayarlari: di
 
 
 def olasilik_modeli_kur(egitim: pd.DataFrame, sutunlar: list[str], model_ayarlari: dict):
-    """Kalibre edilmiş olasılık modeli. Kurulamazsa None.
+    """Kalibre edilmiş olasılık modeli ve kullandığı sütunlar. Kurulamazsa (None, []).
 
     Kalibrasyon için yeterli gün yoksa ya da ayrılan kısımda hem dolu hem boş
     an yoksa kalibrasyonsuz model dönüyor.
     """
     if dolu_hedefi(egitim).nunique() < 2:
         # eğitimde hiç dolu an yoksa (ya da hepsi doluysa) öğrenecek bir şey yok
-        return None
+        return None, []
 
     son_gun = egitim["zaman_utc"].dt.normalize().max()
     kesim = son_gun - pd.Timedelta(days=ayarlar.KALIBRASYON_GUN - 1)
     ogren = egitim[egitim["zaman_utc"] < kesim]
     ayir = egitim[egitim["zaman_utc"] >= kesim]
     if ogren.empty or dolu_hedefi(ogren).nunique() < 2 or dolu_hedefi(ayir).nunique() < 2:
-        return siniflandirici(egitim, sutunlar, model_ayarlari)
+        sutunlar = dolu_sutunlar(egitim, sutunlar)
+        return siniflandirici(egitim, sutunlar, model_ayarlari), sutunlar
 
+    sutunlar = dolu_sutunlar(ogren, sutunlar)
     model = siniflandirici(ogren, sutunlar, model_ayarlari)
     # FrozenEstimator: modeli tekrar eğitme, sadece çıktısını düzelt
     kalibre = CalibratedClassifierCV(FrozenEstimator(model), method="isotonic")
-    return kalibre.fit(ayir[sutunlar], dolu_hedefi(ayir))
+    return kalibre.fit(ayir[sutunlar], dolu_hedefi(ayir)), sutunlar
 
 
 def olasilik_tahmin_et(
     egitim: pd.DataFrame, test: pd.DataFrame, sutunlar: list[str], model_ayarlari: dict
 ):
-    model = olasilik_modeli_kur(egitim, sutunlar, model_ayarlari)
+    model, sutunlar = olasilik_modeli_kur(egitim, sutunlar, model_ayarlari)
     if model is None:
         # model kurulamadıysa eğitimdeki dolu oranını herkese veriyoruz
         return None, pd.Series(float(dolu_hedefi(egitim).mean()), index=test.index)
