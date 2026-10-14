@@ -61,10 +61,17 @@ def hatali_yol(zaman: datetime, etiket: str) -> str:
 
 def meta_temizle(meta: dict[str, Any] | None) -> dict[str, str] | None:
     """Blob meta verisi sadece ASCII kabul ediyor. Değerleri metne çevirip
-    ASCII dışı karakterleri ? yapıyoruz ve uzunluğu sınırlıyoruz."""
-    if not meta:
-        return None
-    return {k: str(v).encode("ascii", "replace").decode("ascii")[:256] for k, v in meta.items()}
+    ASCII dışı karakterleri ? yapıyoruz ve uzunluğu sınırlıyoruz.
+
+    Boş değerleri göndermiyoruz: bulutta hiç denenmedi, kanıtın en çok
+    gerektiği anda (hatali/ yazımı) yüklemeyi riske atmasın.
+    """
+    temiz = {
+        k: str(v).encode("ascii", "replace").decode("ascii")[:256]
+        for k, v in (meta or {}).items()
+        if v is not None and str(v) != ""
+    }
+    return temiz or None
 
 
 def _sikistir(icerik: Any) -> bytes:

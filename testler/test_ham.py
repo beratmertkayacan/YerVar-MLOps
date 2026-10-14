@@ -138,6 +138,14 @@ def test_blob_meta_verisi_ascii() -> None:
     assert kap.cagrilar[0]["metadata"] == {"ilce": "?MRAN?YE", "kayit": "247"}
 
 
+def test_bos_meta_degerleri_atilir() -> None:
+    from yervar.depolama.ham import meta_temizle
+
+    assert meta_temizle({"sebep": "az_kayit", "konum": "", "x": None}) == {"sebep": "az_kayit"}
+    assert meta_temizle({"konum": ""}) is None
+    assert meta_temizle(None) is None
+
+
 def test_hatali_yol_l1_onekinin_disinda() -> None:
     from yervar.depolama.ham import hatali_yol
 
