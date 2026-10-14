@@ -101,8 +101,55 @@ def test_5xx_sonrasi_tekrar_dener() -> None:
 
 
 def test_4xx_tekrar_denenmez() -> None:
-    with pytest.raises(httpx.HTTPStatusError):
+    with pytest.raises(GecersizYanit, match="1 deneme") as hata:
         istemci_modulu.park_listesi_getir(sahte_istemci([404, 200]))
+    assert hata.value.gecersiz.sebep == "istemci_hatasi"
+    assert hata.value.gecersiz.durum_kodu == 404
+
+
+def test_429_sonrasi_tekrar_dener() -> None:
+    tur = istemci_modulu.park_listesi_getir(sahte_istemci([429, 200]))
+    assert tur.deneme == 2
+
+
+def retry_after(deger: str):
+    return lambda istek: httpx.Response(
+        429, headers={"Retry-After": deger}, json={}, request=istek
+    )
+
+
+def beklemeleri_kaydet(monkeypatch) -> list[float]:
+    beklemeler: list[float] = []
+    monkeypatch.setattr(istemci_modulu.time, "sleep", beklemeler.append)
+    return beklemeler
+
+
+def test_retry_after_saniyesi_kadar_beklenir(monkeypatch) -> None:
+    beklemeler = beklemeleri_kaydet(monkeypatch)
+    istemci_modulu.park_listesi_getir(sahte_istemci([retry_after("3"), 200]))
+    assert beklemeler == [3.0]
+
+
+def test_retry_after_butceyi_asarsa_deneme_kesilir(monkeypatch) -> None:
+    beklemeler = beklemeleri_kaydet(monkeypatch)
+    with pytest.raises(KaynakHatasi, match="HTTP 429"):
+        istemci_modulu.park_listesi_getir(sahte_istemci([retry_after("9999"), 200]))
+    assert beklemeler == []
+
+
+def test_retry_after_tarihse_normal_bekleme(monkeypatch) -> None:
+    beklemeler = beklemeleri_kaydet(monkeypatch)
+    tarih = retry_after("Wed, 21 Oct 2026 07:28:00 GMT")
+    istemci_modulu.park_listesi_getir(sahte_istemci([tarih, 200]))
+    assert beklemeler == [2.0]
+
+
+def test_bozuk_sikistirma_tekrar_denenir() -> None:
+    def bozuk(istek: httpx.Request) -> httpx.Response:
+        raise httpx.DecodingError("bozuk gzip", request=istek)
+
+    tur = istemci_modulu.park_listesi_getir(sahte_istemci([bozuk, 200]))
+    assert tur.deneme == 2
 
 
 def test_tum_denemeler_biterse_kaynak_hatasi_verir() -> None:
@@ -225,6 +272,32 @@ def test_gecersiz_yanit_saklanir_loglanir_ve_cikis_1(tmp_path, monkeypatch, capl
     assert len(hatalilar) == 1
     assert gzip.decompress(hatalilar[0].read_bytes()).decode() == "<html>Bakımdayız</html>"
     assert list(tmp_path.rglob("*.json.gz")) == []
+
+
+def test_404_saklanir_ve_tek_satir_loglanir(tmp_path, monkeypatch, caplog) -> None:
+    kod = ana_programi_calistir(
+        monkeypatch, sahte_istemci([metin_yanit("yok", 404)]), YerelDepo(tmp_path)
+    )
+    assert kod == 1
+    assert "KAYNAK_GECERSIZ" in caplog.text
+    assert "sebep=istemci_hatasi durum=404" in caplog.text
+    assert all(r.exc_info is None for r in caplog.records)  # uzun hata izi yok
+    dosya = next((tmp_path / "hatali").rglob("*.govde.gz"))
+    assert gzip.decompress(dosya.read_bytes()) == b"yok"
+
+
+def test_ag_hatasiyla_biten_turda_kanit_saklanir(tmp_path, monkeypatch, caplog) -> None:
+    monkeypatch.setattr(ayarlar, "DENEME_SAYISI", 2)
+    istemci = sahte_istemci([metin_yanit("<html>Bakım</html>"), ag_hatasi])
+
+    kod = ana_programi_calistir(monkeypatch, istemci, YerelDepo(tmp_path))
+
+    assert kod == 1
+    assert "KAYNAK_KESINTISI" in caplog.text
+    assert "otopark kaydedildi" not in caplog.text
+    hatalilar = list((tmp_path / "hatali").rglob("*.govde.gz"))
+    assert len(hatalilar) == 1
+    assert gzip.decompress(hatalilar[0].read_bytes()).decode() == "<html>Bakım</html>"
 
 
 def test_hatali_govde_boyut_siniri(tmp_path, monkeypatch) -> None:

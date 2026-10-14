@@ -4,13 +4,16 @@
 geçici sorunlarda tekrar denemek.
 
 Hangi durumda tekrar deneriz?
-- Ağ hatası, zaman aşımı, 5xx  → sunucunun geçici sorunu
-- Geçersiz yanıt               → 2xx ama JSON değil, liste değil, çok az kayıt
-                                 ya da kayıtların çoğunda zorunlu alan yok
-- 3xx (yönlendirme)            → bakım sayfasına yönlendirme olabilir; takip
-                                 etmiyoruz, geçersiz yanıt sayıyoruz
-- 4xx                          → isteğimiz yanlış, tekrar denemek anlamsız
+- Ağ hatası, zaman aşımı, 5xx, 408, 429  → geçici sorun, bekle ve tekrar dene
+- Geçersiz yanıt  → 2xx ama JSON değil, liste değil, çok az kayıt ya da
+                    kayıtların çoğunda zorunlu alan yok
+- 3xx             → bakım sayfasına yönlendirme olabilir; takip etmiyoruz,
+                    geçersiz yanıt sayıp tekrar deniyoruz
+- Diğer 4xx       → isteğimiz reddedildi, tekrar denemek anlamsız. Geçersiz
+                    yanıt olarak saklanıyor (sebep istemci_hatasi)
 Bekleme süresi her denemede ikiye katlanır (2, 4, 8, 16 sn): üstel geri çekilme.
+Sunucu Retry-After ile saniye verirse o kadar bekliyoruz; bütçeye sığmıyorsa
+denemeyi bırakıyoruz.
 
 Denemeler bir süre bütçesiyle sınırlı. Hiçbir deneme kullanılabilir tur
 vermezse son denemenin türüne göre iki hatadan biri fırlıyor:
@@ -130,6 +133,13 @@ def _gecersiz(yanit: httpx.Response, sebep: str) -> GecersizGovde:
     )
 
 
+def _retry_after(yanit: httpx.Response) -> float | None:
+    """Retry-After başlığı saniye ise onu döndürür. Tarih biçimini ve
+    anlaşılmayan değerleri yok sayıyoruz, o zaman normal bekleme kullanılır."""
+    deger = yanit.headers.get("retry-after", "").strip()
+    return float(deger) if deger.isdigit() else None
+
+
 def park_listesi_getir(istemci: httpx.Client, butce_sn: float | None = None) -> Tur:
     """Tüm otoparkların anlık durumunu bir tur olarak döndürür.
 
@@ -149,16 +159,23 @@ def park_listesi_getir(istemci: httpx.Client, butce_sn: float | None = None) -> 
 
     for deneme in range(1, ayarlar.DENEME_SAYISI + 1):
         son_deneme_gecersiz = False
+        bu_bekleme = bekleme
         try:
             yanit = istemci.get(adres)
-        except httpx.TransportError as e:  # bağlantı hatası, zaman aşımı
-            hata = str(e)
+        except httpx.RequestError as e:
+            # bağlantı hatası, zaman aşımı, bozuk sıkıştırılmış yanıt...
+            hata = str(e) or type(e).__name__
         else:
             kod = yanit.status_code
-            if kod >= 500:
+            if kod >= 500 or kod in (408, 429):
                 hata = f"HTTP {kod}"
+                bu_bekleme = _retry_after(yanit) or bekleme
             elif kod >= 400:
-                yanit.raise_for_status()  # 4xx: tekrar denenmez
+                # isteğimiz reddedildi, tekrar denemiyoruz ama gövdeyi saklıyoruz
+                raise GecersizYanit(
+                    f"{deneme} deneme başarısız: HTTP {kod} istemci hatası",
+                    _gecersiz(yanit, "istemci_hatasi"),
+                )
             elif kod >= 300:
                 son_gecersiz = _gecersiz(yanit, "yonlendirme")
                 son_deneme_gecersiz = True
@@ -181,11 +198,11 @@ def park_listesi_getir(istemci: httpx.Client, butce_sn: float | None = None) -> 
                     hata += f" konum={son_gecersiz.konum}"
 
         son_deneme = deneme == ayarlar.DENEME_SAYISI
-        butce_bitiyor = time.monotonic() + bekleme >= bitis
+        butce_bitiyor = time.monotonic() + bu_bekleme >= bitis
         if son_deneme or butce_bitiyor:
             break
-        gunluk.warning("deneme %d başarısız (%s), %.0f sn sonra tekrar", deneme, hata, bekleme)
-        time.sleep(bekleme)
+        gunluk.warning("deneme %d başarısız (%s), %.0f sn sonra tekrar", deneme, hata, bu_bekleme)
+        time.sleep(bu_bekleme)
         bekleme *= 2
 
     mesaj = f"{deneme} deneme başarısız: {hata}"
