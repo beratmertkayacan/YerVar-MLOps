@@ -36,12 +36,18 @@ KOMIT=""
 if [ -n "$KOK" ]; then
   KOMIT=$(git -C "$KOK" log -1 --format=%h -- "${YOLLAR[@]}" 2>/dev/null || true)
 fi
+# KOD_SURUMU bilerek export edilmiyor. Edilseydi bu dosyayı source ettiğin
+# terminalde yerelde çalıştırdığın Python da onu görür, loglara "surum=yerel"
+# yerine imajın sürümünü yazardı. Script'ler bu dosyayı kendi içlerinde source
+# ettiği için değişken onlarda yine var. Önceki bir oturumdan export edilmiş
+# kalmışsa unset onu temizliyor.
+unset KOD_SURUMU
 if [ -n "$KOMIT" ]; then
-  export KOD_SURUMU="$SURUM-$KOMIT"
+  KOD_SURUMU="$SURUM-$KOMIT"
   export IMAJ=$KAYIT.azurecr.io/yervar:$KOD_SURUMU
 else
   echo "UYARI: commit okunamadı, IMAJ boş bırakıldı. Komutu repo klasöründen çalıştır." >&2
-  export KOD_SURUMU=""
+  KOD_SURUMU=""
   export IMAJ=""
 fi
 
