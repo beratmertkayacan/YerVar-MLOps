@@ -21,6 +21,9 @@
 
 set -euo pipefail
 source "$(dirname "$0")/degiskenler.sh"
+source "$(dirname "$0")/ortak.sh"
+
+imaj_hazir_mi
 
 DEPOLAMA_ID=$(az storage account show -n "$DEPOLAMA" -g "$KG" --query id -o tsv)
 ACR_KIMLIK_ID=$(az identity show -n "$KIMLIK_ACR" -g "$KG" --query id -o tsv)
@@ -56,16 +59,10 @@ fi
 IS_ASIL=$(az containerapp job show -n "$IS_TABLO" -g "$KG" --query identity.principalId -o tsv)
 
 echo "▶ '$KAP' kabına okuma yetkisi"
-az role assignment create --assignee-object-id "$IS_ASIL" \
-  --assignee-principal-type ServicePrincipal --role "Storage Blob Data Reader" \
-  --scope "$DEPOLAMA_ID/blobServices/default/containers/$KAP" -o none 2>/dev/null \
-  || echo "  (rol zaten var)"
+rol_ver "$IS_ASIL" "Storage Blob Data Reader" "$DEPOLAMA_ID/blobServices/default/containers/$KAP"
 
 echo "▶ '$TABLO_KAP' kabına yazma yetkisi"
-az role assignment create --assignee-object-id "$IS_ASIL" \
-  --assignee-principal-type ServicePrincipal --role "Storage Blob Data Contributor" \
-  --scope "$DEPOLAMA_ID/blobServices/default/containers/$TABLO_KAP" -o none 2>/dev/null \
-  || echo "  (rol zaten var)"
+rol_ver "$IS_ASIL" "Storage Blob Data Contributor" "$DEPOLAMA_ID/blobServices/default/containers/$TABLO_KAP"
 
 echo
 echo "✓ Bitti. Rollerin yayılması için ~5 dakika bekle, sonra gece beklemeden bir kez elle çalıştır:"
