@@ -109,6 +109,7 @@ class Okuma:
     dosya: int = 0
     atlanan_dosya: int = 0
     atlanan_kayit: int = 0
+    bos_birakilan_deger: int = 0
     sebepler: dict[str, int] = field(default_factory=dict)
     ornekler: list[str] = field(default_factory=list)
 
@@ -136,17 +137,19 @@ def _ondalik(deger: Any) -> float | None:
         return None
 
 
-def kayit_satiri(p: Any, zaman: str) -> dict | None:
-    """Tek bir API kaydını tablo satırına çevirir. parkID yoksa None.
+def kayit_satiri(p: Any, zaman: str) -> tuple[dict | None, int]:
+    """Tek bir API kaydını tablo satırına çevirir: (satır, boş bırakılan değer sayısı).
 
-    parkID satırın anahtarı; onsuz satır hiçbir otoparka bağlanamıyor, atlanıyor.
-    Diğer alanlar beklenmeyen tipteyse boş bırakılıyor: DuckDB tek bir tip
-    uyuşmazlığında bütün günü reddederdi. Boş yer ya da kapasitesi boş satır
-    tabloda zaten geçerli sayılmıyor.
+    parkID satırın anahtarı; onsuz satır hiçbir otoparka bağlanamıyor, atlanıyor
+    (satır None). Diğer alanlar beklenmeyen tipteyse boş bırakılıyor: DuckDB tek
+    bir tip uyuşmazlığında bütün günü reddederdi. Kaç değerin böyle boşaltıldığı
+    sayılıyor, çünkü gecersiz_satir bunu göstermiyor: boş kapasite ya da boş yer
+    "geçersiz" değil "bilinmiyor" sayılıyor, ad ve konum ise hiç bakılmıyor.
+    Zaten gelmeyen (None ya da "") değer sayılmıyor, sadece bozuk gelen.
     """
     if not isinstance(p, dict) or _tam_sayi(p.get("parkID")) is None:
-        return None
-    return {
+        return None, 0
+    satir = {
         "zaman": zaman,
         "park_id": p["parkID"],
         "ad": _metin(p.get("parkName")),
@@ -158,6 +161,13 @@ def kayit_satiri(p: Any, zaman: str) -> dict | None:
         "bos": _tam_sayi(p.get("emptyCapacity")),
         "acik": _tam_sayi(p.get("isOpen")),
     }
+    kaynak = {"ad": "parkName", "ilce": "district", "tip": "parkType", "lat": "lat",
+              "lng": "lng", "kapasite": "capacity", "bos": "emptyCapacity", "acik": "isOpen"}
+    bos = sum(
+        1 for sutun, alan in kaynak.items()
+        if satir[sutun] is None and p.get(alan) not in (None, "")
+    )
+    return satir, bos
 
 
 def gunu_oku(depo: YerelDepo | BlobDepo, gun: date) -> Okuma:
@@ -188,11 +198,12 @@ def gunu_oku(depo: YerelDepo | BlobDepo, gun: date) -> Okuma:
             continue
         onceki = len(okuma.satirlar)
         for p in kayitlar:
-            satir = kayit_satiri(p, zaman.strftime("%Y-%m-%d %H:%M:%S"))
+            satir, bos = kayit_satiri(p, zaman.strftime("%Y-%m-%d %H:%M:%S"))
             if satir is None:
                 okuma.atlanan_kayit += 1
             else:
                 okuma.satirlar.append(satir)
+                okuma.bos_birakilan_deger += bos
         if len(okuma.satirlar) == onceki:
             okuma.atla(ad, "gecerli_kayit_yok")
     return okuma
@@ -365,7 +376,8 @@ OZET_SUTUNLAR = {
     "tur": "INTEGER", "tamlik": "DOUBLE", "satir": "INTEGER", "canli_otopark": "INTEGER",
     "gecersiz_satir": "INTEGER", "sicrama": "INTEGER", "tur_basina_en_az": "INTEGER",
     "tur_basina_en_cok": "INTEGER", "atlanan_dosya": "INTEGER", "atlanan_kayit": "INTEGER",
-    "hatali": "INTEGER", "sure_sn": "DOUBLE", "surum": "VARCHAR", "islenme_utc": "TIMESTAMP",
+    "bos_birakilan_deger": "INTEGER", "hatali": "INTEGER", "sure_sn": "DOUBLE",
+    "surum": "VARCHAR", "islenme_utc": "TIMESTAMP",
 }
 
 
@@ -464,6 +476,7 @@ def gunu_isle(ham: YerelDepo | BlobDepo, tablo: YerelDepo | BlobDepo, gun: date)
             "tur_basina_en_cok": ozet["tur_basina_en_cok"],
             "atlanan_dosya": okuma.atlanan_dosya,
             "atlanan_kayit": okuma.atlanan_kayit,
+            "bos_birakilan_deger": okuma.bos_birakilan_deger,
             # Toplayıcının o gün sakladığı geçersiz yanıtlar (Adım 1).
             "hatali": len(ham.listele(f"hatali/{gun:%Y/%m/%d}/")),
             "sure_sn": round(saat() - bas, 1),

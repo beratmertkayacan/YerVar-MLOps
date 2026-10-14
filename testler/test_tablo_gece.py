@@ -87,6 +87,7 @@ def test_bozuk_dosyalar_atlanir_gun_yine_yazilir(tmp_path: Path) -> None:
     assert var_mi(tablo, GUN) == (True, True)
     assert bilgi["atlanan_dosya"] == 4
     assert bilgi["atlanan_kayit"] == 3  # numarasız dosyadaki 2 + iyi turdaki 1
+    assert bilgi["bos_birakilan_deger"] == 1  # "bilinmiyor" konumu
     assert bilgi["tur"] == 101
     # konumu bozuk kayıt atlanmadı, sadece konumu boş kaldı
     yol = tablo.kok / t.doluluk_yolu(GUN)
@@ -248,7 +249,7 @@ def test_gun_tamam_satiri_meta_ve_ozet(tmp_path, monkeypatch, caplog) -> None:
     satir = next(r.getMessage() for r in caplog.records if r.getMessage().startswith("GUN_TAMAM"))
     for anahtar in ("tarih", "tur", "tamlik", "satir", "canli_otopark", "gecersiz_satir",
                     "sicrama", "tur_basina_en_az", "tur_basina_en_cok", "atlanan_dosya",
-                    "atlanan_kayit", "hatali", "sure_sn", "surum"):
+                    "atlanan_kayit", "bos_birakilan_deger", "hatali", "sure_sn", "surum"):
         assert f" {anahtar}=" in satir
     assert "hatali=2" in satir and "surum=0.7-abc1234" in satir
 
@@ -265,6 +266,28 @@ def test_gun_tamam_satiri_meta_ve_ozet(tmp_path, monkeypatch, caplog) -> None:
     kayit = dict(zip(sutunlar, satirlar[0], strict=True))
     assert kayit["tarih"] == GUN
     assert kayit["tur"] == 13 and kayit["hatali"] == 2 and kayit["surum"] == "0.7-abc1234"
+    assert kayit["bos_birakilan_deger"] == 0
+
+
+def test_yanlis_tipteki_degerler_bos_birakilip_sayilir(tmp_path, monkeypatch) -> None:
+    ham = YerelDepo(tmp_path / "ham", uzerine_yaz=False)
+    tablo = MetaKaydeden(tmp_path / "tablo")
+    turlar_yaz(ham, GUN, 5)
+    bozuk = park(3)
+    bozuk.update({"parkName": 123, "district": ["liste"], "lat": "abc", "lng": "",
+                  "capacity": "yüz", "isOpen": True})  # lng boş: zaten gelmemiş, sayılmaz
+    ham.yaz(ham_yol(zaman(GUN, 5), "parklar"), [park(1), bozuk])
+
+    bilgi = t.gunu_isle(ham, tablo, GUN)
+
+    assert bilgi["bos_birakilan_deger"] == 5  # ad, ilçe, lat, kapasite, açık
+    assert bilgi["atlanan_kayit"] == 0  # kayıt atlanmadı, satırı yazıldı
+    assert tablo.metalar[t.doluluk_yolu(GUN)]["bos_birakilan_deger"] == "5"
+    satir = duckdb.sql(
+        f"SELECT kapasite, acik, gecerli FROM '{tablo.kok / t.doluluk_yolu(GUN)}' "
+        "WHERE park_id = 3"
+    ).fetchone()
+    assert satir == (None, None, None)  # gecersiz_satir'a da girmiyor: "bilinmiyor"
 
 
 def test_gun_eksik_uyarisi_isi_dusurmez(tmp_path, monkeypatch, caplog) -> None:
