@@ -22,6 +22,12 @@ echo "== Bugün ($GUN) buluta yazılan blob sayısı =="
 az storage blob list --account-name "$DEPOLAMA" -c "$KAP" --prefix "$GUN/" \
   --auth-mode login --num-results 1000 --query "length(@)" -o tsv
 
+# Geçersiz yanıtlar ayrı bir önekte tutuluyor (ham/hatali/). Normalde 0 olmalı.
+echo
+echo "== Bugün saklanan geçersiz yanıt sayısı (hatali/$GUN/) =="
+az storage blob list --account-name "$DEPOLAMA" -c "$KAP" --prefix "hatali/$GUN/" \
+  --auth-mode login --num-results 1000 --query "length(@)" -o tsv
+
 echo
 echo "== Tablo kabındaki son 3 gün =="
 az storage blob list --account-name "$DEPOLAMA" -c "$TABLO_KAP" --prefix "doluluk/" \

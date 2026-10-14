@@ -1,21 +1,30 @@
 #!/usr/bin/env bash
 # Adım 6 — İlk alarmlar: veri gelmezse e-posta at.
 #
-# İki kural var, ikisi de Log Analytics'teki log satırlarını sayıyor:
+# Üç kural var, üçü de Log Analytics'teki log satırlarını sayıyor:
 #
-#   alarm-toplayici-sessiz   Son 30 dakikada hiç "otopark kaydedildi" satırı yoksa.
-#                            Sebebi ne olursa olsun veri gelmiyor demek: iş durdu,
-#                            imaj bozuldu, yetki gitti, İSPARK çöktü...
+#   alarm-toplayici-sessiz   Son 30 dakikada en az EN_AZ_OTOPARK kayıtlı hiç tur
+#                            yazılmadıysa. Sebebi ne olursa olsun veri gelmiyor
+#                            demek: iş durdu, imaj bozuldu, yetki gitti, İSPARK çöktü...
+#                            Satırdaki sayıya da bakıyoruz: sadece birkaç otoparkla
+#                            yazılmış bir tur "veri geliyor" sayılmasın.
 #
 #   alarm-kaynak-kesintisi   Son 30 dakikada 3'ten fazla KAYNAK_KESINTISI satırı varsa.
 #                            İSPARK cevap vermiyor demek (28 Eylül'deki gibi).
 #
-# İlki her şeyi yakalar ama sebebini söylemez. İkincisi sebebi söyler. İkisi
-# birlikte gelirse sorun İSPARK'ta, sadece ilki gelirse bizde.
+#   alarm-kaynak-gecersiz    Son 30 dakikada 1'den fazla KAYNAK_GECERSIZ satırı varsa.
+#                            İSPARK cevap veriyor ama yanıt kullanılamıyor: biçim
+#                            değişmiş, kayıt sayısı düşmüş ya da istek reddediliyor
+#                            (4xx). Yanıtın kendisi ham/hatali/ altında duruyor.
+#
+# İlki her şeyi yakalar ama sebebini söylemez. Diğer ikisi sebebi söyler. Sessizlik
+# kesinti ya da geçersiz yanıtla birlikte gelirse sorun İSPARK'ta, tek başına
+# gelirse bizde.
 #
 # Ön koşul: portalda "ag-yervar" adında bir eylem grubu (e-posta adresin içinde).
 # Çalıştırma:  bash altyapi/kur_06_alarmlar.sh
-# Tekrar çalıştırmak güvenli: var olan kurala dokunmaz.
+# Tekrar çalıştırmak güvenli: kural varsa güncellenir, böylece eşik ya da sorgu
+# değiştiğinde script'i yeniden çalıştırmak yetiyor.
 
 set -euo pipefail
 source "$(dirname "$0")/degiskenler.sh"
@@ -48,11 +57,19 @@ GRUP_YERI=$(az monitor action-group show -n "$EYLEM_GRUBU" -g "$KG" --query loca
   exit 1
 }
 
-# Bir kural oluşturur. Varsa dokunmaz.
+# Bir kural oluşturur. Varsa aynı değerlerle günceller.
 #   $1 ad   $2 açıklama   $3 koşul   $4 sorgu   $5 önem (0 kritik ... 4 bilgi)
 kural_kur() {
   if az monitor scheduled-query show -n "$1" -g "$KG" -o none 2>/dev/null; then
-    echo "▶ Kural zaten var: $1"
+    echo "▶ Kural var, güncelleniyor: $1"
+    az monitor scheduled-query update -n "$1" -g "$KG" \
+      --description "$2" \
+      --condition "$3" \
+      --condition-query sorgu="$4" \
+      --evaluation-frequency 15m --window-size 30m \
+      --severity "$5" \
+      --action-groups "$GRUP_ID" \
+      -o none
     return
   fi
   echo "▶ Kural oluşturuluyor: $1"
@@ -69,16 +86,26 @@ kural_kur() {
     -o none
 }
 
+# Sorgu, "TUR_TAMAM 246 otopark kaydedildi ..." satırından sayıyı çekip
+# eşikle karşılaştırıyor. Eşik degiskenler.sh'deki EN_AZ_OTOPARK.
 kural_kur alarm-toplayici-sessiz \
-  "Son 30 dakikada hiç otopark verisi yazılmadı" \
+  "Son 30 dakikada en az $EN_AZ_OTOPARK otoparklık hiç tur yazılmadı" \
   "count 'sorgu' < 1" \
-  'ContainerAppConsoleLogs_CL | where Log_s has "otopark kaydedildi"' \
+  "ContainerAppConsoleLogs_CL | where Log_s has \"otopark kaydedildi\" | extend kayit = toint(extract(@\"(\d+) otopark kaydedildi\", 1, Log_s)) | where kayit >= $EN_AZ_OTOPARK" \
   1
 
 kural_kur alarm-kaynak-kesintisi \
   "İSPARK son 30 dakikada 3'ten fazla turda cevap vermedi" \
   "count 'sorgu' > 3" \
   'ContainerAppConsoleLogs_CL | where Log_s has "KAYNAK_KESINTISI"' \
+  2
+
+# Eşik 1'den fazla: tek bir geçersiz tur (ör. elle yapılan bir deneme) e-posta
+# attırmasın, üst üste gelirse haber versin.
+kural_kur alarm-kaynak-gecersiz \
+  "İSPARK geçersiz yanıt verdi ya da isteği reddetti (biçim değişikliği, 4xx)" \
+  "count 'sorgu' > 1" \
+  'ContainerAppConsoleLogs_CL | where Log_s has "KAYNAK_GECERSIZ"' \
   2
 
 echo
