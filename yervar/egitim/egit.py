@@ -69,6 +69,7 @@ GUVENILEN_TIPLER = [
     "functools.partial",
     "sklearn.ensemble._hist_gradient_boosting.predictor.TreePredictor",
     "sklearn.utils.validation.check_array",
+    "sklearn.calibration._CalibratedClassifier",
 ]
 OLCULER = ("genel", "sabah_07_10", "neredeyse_dolu")
 
@@ -241,6 +242,10 @@ def karneyi_kaydet(karne: dict) -> None:
     for ad, tablo in karne["tablolar"].items():
         mlflow.log_text(tablo.to_csv(), f"karne/{ad}.csv")
     mlflow.log_dict(karne["karar"], "karne/karar.json")
+    mlflow.log_params({
+        "olasilik_esigi": ayarlar.DOLU_OLASILIK_ESIGI,
+        "kalibrasyon_gun": ayarlar.KALIBRASYON_GUN,
+    })
     # dolu tanımı değişirse eski koşularla karar ölçüleri karşılaştırılamaz
     mlflow.log_param("dolu_tanimi", f"bos<=min(kapasite*{ayarlar.DOLU_ORAN},"
                                     f"{ayarlar.DOLU_EN_FAZLA_ARAC})")

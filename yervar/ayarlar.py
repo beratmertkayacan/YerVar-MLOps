@@ -72,6 +72,9 @@ SAGLIKLI_CANLI_ORAN = float(os.getenv("SAGLIKLI_CANLI_ORAN", "0.8"))
 # Şimdilik 0.5; kalibrasyona bakıp sonra ayarlanacak.
 DOLU_OLASILIK_ESIGI = float(os.getenv("DOLU_OLASILIK_ESIGI", "0.5"))
 
+# Olasılık modelinin kalibrasyonu için eğitimin son kaç günü ayrılıyor.
+KALIBRASYON_GUN = int(os.getenv("KALIBRASYON_GUN", "2"))
+
 # Deney takibi (L3)
 # Şimdilik yerel bir dosya. Azure ML'e geçince sadece bu adres değişecek.
 MLFLOW_ADRES = os.getenv(

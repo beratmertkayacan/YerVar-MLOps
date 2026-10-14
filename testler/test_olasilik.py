@@ -2,13 +2,14 @@
 
 import mlflow
 import pandas as pd
+from sklearn.calibration import CalibratedClassifierCV
 
 from testler.test_egitim import sahte_set
 from yervar import ayarlar
 from yervar.degerlendirme.karne import kalibrasyon, karne_olustur, olasilik_olculeri
 from yervar.egitim import egit
 from yervar.egitim.egit import geri_test, veri_hazirla
-from yervar.egitim.olasilik import dolu_hedefi, olasilik_tahmin_et
+from yervar.egitim.olasilik import dolu_hedefi, olasilik_modeli_kur, olasilik_tahmin_et
 
 
 def dolulu_set() -> pd.DataFrame:
@@ -72,3 +73,21 @@ def test_olasilik_geri_testte_ve_kayitta(tmp_path, monkeypatch) -> None:
         experiment_ids=[kosu.experiment_id], output_format="list"
     )
     assert {m.name for m in modeller} == {"model", "model_olasilik"}
+
+
+def test_yeterli_gun_varsa_kalibre_edilir(monkeypatch) -> None:
+    monkeypatch.setattr(ayarlar, "KALIBRASYON_GUN", 1)
+    df = veri_hazirla(dolulu_set())
+    sutunlar = ["saat", "doluluk_simdi"]
+
+    # 3 gün: ilk 2 günle eğitim, son günle kalibrasyon
+    assert isinstance(olasilik_modeli_kur(df, sutunlar, {"max_iter": 20}), CalibratedClassifierCV)
+
+
+def test_gun_yetmezse_kalibrasyonsuz(monkeypatch) -> None:
+    monkeypatch.setattr(ayarlar, "KALIBRASYON_GUN", 5)
+    df = veri_hazirla(dolulu_set())
+
+    # 3 günlük veride 5 gün ayrılamaz, düz model dönüyor
+    model = olasilik_modeli_kur(df, ["saat", "doluluk_simdi"], {"max_iter": 20})
+    assert not isinstance(model, CalibratedClassifierCV)
