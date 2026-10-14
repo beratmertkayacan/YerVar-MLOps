@@ -7,11 +7,17 @@ Kurallar:
 2. Her tur ayrı bir dosyaya yazılır; dosya adı UTC zaman damgalıdır.
 3. Dosyalar gzip ile sıkıştırılır. Ölçülen: tek bir liste yanıtı ~56 KB,
    sıkıştırınca ~8 KB. Günde 288 turla aylık ~480 MB yerine ~70 MB.
+4. Ham kapta var olan bir dosyanın üzerine yazılmaz. Aynı ad tekrar yazılmak
+   istenirse uyarı loglanır ve var olan dosya korunur.
 
 İki depo var ve ikisi de aynı dört metoda sahip (yaz, yaz_bayt, listele,
 oku_bayt): YerelDepo diske, BlobDepo Azure'a yazar. Kodun geri kalanı hangisiyle
 konuştuğunu bilmez; depo_olustur() ayara bakıp doğru olanı verir. L1 (tablo.py)
-aynı sınıfları hem ham veriyi okumak hem tabloyu yazmak için kullanıyor.
+aynı sınıfları hem ham veriyi okumak hem tabloyu yazmak için kullanıyor. Tablo
+kabında üzerine yazma açık, çünkü bir gün tekrar işlenebilmeli.
+
+Geçersiz yanıtlar "hatali/" önekiyle aynı ham kaba yazılır. L1 sadece
+"YYYY/MM/DD/" önekini okuduğu için bu dosyalar ona karışmaz.
 """
 
 import gzip
@@ -22,6 +28,9 @@ from pathlib import Path
 from typing import Any
 
 from yervar import ayarlar
+from yervar.gunluk import gunluk_al
+
+gunluk = gunluk_al(__name__)
 
 
 def simdi_utc() -> datetime:
@@ -42,28 +51,52 @@ def ham_yol(zaman: datetime, etiket: str) -> str:
     return f"{zaman:%Y/%m/%d/%H}/{etiket}_{zaman:%Y%m%dT%H%M%SZ}.json.gz"
 
 
+def hatali_yol(zaman: datetime, etiket: str) -> str:
+    """Geçersiz bir yanıtın yolu: hatali/2026/10/14/09/parklar_20261014T090000Z.govde.gz
+
+    Uzantı .json.gz değil, çünkü gövde JSON olmayabilir (bakım sayfası gibi).
+    """
+    return f"hatali/{zaman:%Y/%m/%d/%H}/{etiket}_{zaman:%Y%m%dT%H%M%SZ}.govde.gz"
+
+
+def meta_temizle(meta: dict[str, Any] | None) -> dict[str, str] | None:
+    """Blob meta verisi sadece ASCII kabul ediyor. Değerleri metne çevirip
+    ASCII dışı karakterleri ? yapıyoruz ve uzunluğu sınırlıyoruz."""
+    if not meta:
+        return None
+    return {k: str(v).encode("ascii", "replace").decode("ascii")[:256] for k, v in meta.items()}
+
+
 def _sikistir(icerik: Any) -> bytes:
     """İçeriği Türkçe karakterleri koruyarak JSON'a çevirip gzip ile sıkıştırır."""
     return gzip.compress(json.dumps(icerik, ensure_ascii=False).encode("utf-8"))
 
 
 class YerelDepo:
-    """Dosyaları yerel diske yazar ve okur (geliştirme ortamı)."""
+    """Dosyaları yerel diske yazar ve okur (geliştirme ortamı).
 
-    def __init__(self, kok: Path) -> None:
+    uzerine_yaz=False ise var olan dosyaya dokunulmaz (ham kap).
+    Meta veri yerelde tutulmuyor, verilirse yok sayılıyor.
+    """
+
+    def __init__(self, kok: Path, uzerine_yaz: bool = True) -> None:
         self.kok = kok
+        self.uzerine_yaz = uzerine_yaz
 
-    def yaz(self, goreli_yol: str, icerik: Any) -> str:
+    def yaz(self, goreli_yol: str, icerik: Any, meta: dict[str, Any] | None = None) -> str:
         """İçeriği JSON'a çevirip sıkıştırarak yazar."""
-        return self.yaz_bayt(goreli_yol, _sikistir(icerik))
+        return self.yaz_bayt(goreli_yol, _sikistir(icerik), meta)
 
-    def yaz_bayt(self, goreli_yol: str, veri: bytes) -> str:
+    def yaz_bayt(self, goreli_yol: str, veri: bytes, meta: dict[str, Any] | None = None) -> str:
         """Hazır baytları atomik olarak yazar.
 
         Atomik yazma: önce .tmp dosyasına yazılır, sonra tek adımda asıl adına
         taşınır. Yazma sırasında süreç kesilirse geride yarım bir dosya kalmaz.
         """
         hedef = self.kok / goreli_yol
+        if not self.uzerine_yaz and hedef.exists():
+            gunluk.warning("dosya zaten var, üzerine yazılmadı: %s", goreli_yol)
+            return str(hedef)
         hedef.parent.mkdir(parents=True, exist_ok=True)
 
         gecici = hedef.with_name(hedef.name + ".tmp")
@@ -91,9 +124,12 @@ class BlobDepo:
 
     Blob yüklemesi kendiliğinden atomiktir: dosya ya tamamen yüklenir ya hiç
     görünmez. Bu yüzden .tmp hilesine gerek yok.
+
+    uzerine_yaz=False ise var olan blob'a dokunulmaz (ham kap).
     """
 
-    def __init__(self, hesap: str, kap: str) -> None:
+    def __init__(self, hesap: str, kap: str, uzerine_yaz: bool = True) -> None:
+        self.uzerine_yaz = uzerine_yaz
         # Azure kütüphaneleri sadece burada yükleniyor: yerel geliştirmede ve
         # testlerde Azure'a hiç ihtiyaç duymuyoruz.
         try:
@@ -114,13 +150,27 @@ class BlobDepo:
         )
         self.kap = servis.get_container_client(kap)
 
-    def yaz(self, goreli_yol: str, icerik: Any) -> str:
+    def yaz(self, goreli_yol: str, icerik: Any, meta: dict[str, Any] | None = None) -> str:
         """İçeriği JSON'a çevirip sıkıştırarak yükler."""
-        return self.yaz_bayt(goreli_yol, _sikistir(icerik))
+        return self.yaz_bayt(goreli_yol, _sikistir(icerik), meta)
 
-    def yaz_bayt(self, goreli_yol: str, veri: bytes) -> str:
-        """Hazır baytları blob olarak yükler, blob adresini döndürür."""
-        return self.kap.upload_blob(goreli_yol, veri, overwrite=True).url
+    def yaz_bayt(self, goreli_yol: str, veri: bytes, meta: dict[str, Any] | None = None) -> str:
+        """Hazır baytları blob olarak yükler, blob adresini döndürür.
+
+        meta: blob'un yanında saklanan kısa bilgiler (tur bilgisi, sürüm).
+        Anahtarlar harf, rakam ve alt çizgiden oluşmalı.
+        """
+        from azure.core.exceptions import ResourceExistsError
+
+        try:
+            yuklenen = self.kap.upload_blob(
+                goreli_yol, veri, overwrite=self.uzerine_yaz, metadata=meta_temizle(meta)
+            )
+        except ResourceExistsError:
+            # aynı turu tekrar yazmaya çalışmak hata değil, var olan korunuyor
+            gunluk.warning("blob zaten var, üzerine yazılmadı: %s", goreli_yol)
+            return f"{self.kap.url}/{goreli_yol}"
+        return yuklenen.url
 
     def listele(self, onek: str) -> list[str]:
         """Önekle başlayan blob adlarını sıralı döndürür.
@@ -134,19 +184,24 @@ class BlobDepo:
         return self.kap.download_blob(goreli_yol).readall()
 
 
-def depo_olustur(kap: str | None = None) -> YerelDepo | BlobDepo:
+def depo_olustur(
+    kap: str | None = None, uzerine_yaz: bool | None = None
+) -> YerelDepo | BlobDepo:
     """DEPO_TURU ayarına göre doğru depoyu döndürür.
 
     kap: hangi bölme — "ham" (varsayılan) ya da "tablo". Yerelde veri/<kap>/
     klasörüne, bulutta aynı adlı blob kabına karşılık gelir.
+    uzerine_yaz: verilmezse ham kapta kapalı, diğer kaplarda açık.
     """
     kap = kap or ayarlar.AZURE_KAP
+    if uzerine_yaz is None:
+        uzerine_yaz = kap != ayarlar.AZURE_KAP
     if ayarlar.DEPO_TURU == "blob":
         if not ayarlar.AZURE_DEPOLAMA_HESABI:
             raise ValueError("DEPO_TURU=blob için AZURE_DEPOLAMA_HESABI ayarlanmalı")
-        return BlobDepo(ayarlar.AZURE_DEPOLAMA_HESABI, kap)
+        return BlobDepo(ayarlar.AZURE_DEPOLAMA_HESABI, kap, uzerine_yaz)
     if ayarlar.DEPO_TURU == "yerel":
-        return YerelDepo(ayarlar.VERI_KOK / kap)
+        return YerelDepo(ayarlar.VERI_KOK / kap, uzerine_yaz)
     raise ValueError(f"bilinmeyen DEPO_TURU: {ayarlar.DEPO_TURU!r} (yerel veya blob olmalı)")
 
 
