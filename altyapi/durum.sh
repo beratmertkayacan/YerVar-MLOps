@@ -28,7 +28,20 @@ echo "== Bugün saklanan geçersiz yanıt sayısı (hatali/$GUN/) =="
 az storage blob list --account-name "$DEPOLAMA" -c "$KAP" --prefix "hatali/$GUN/" \
   --auth-mode login --num-results 1000 --query "length(@)" -o tsv
 
+# Gece işi her günün özetini doluluk dosyasının meta verisine de yazıyor (Adım 2).
+# Dosyayı indirmeden okuyoruz. Tamlık %95'in altındaysa o gün GUN_EKSIK.
 echo
-echo "== Tablo kabındaki son 3 gün =="
-az storage blob list --account-name "$DEPOLAMA" -c "$TABLO_KAP" --prefix "doluluk/" \
-  --auth-mode login --query "[].name" -o tsv 2>/dev/null | tail -3 || echo "  (tablo kabı yok)"
+echo "== Tablo kabındaki son 3 günün özeti =="
+SON_GUNLER=$(az storage blob list --account-name "$DEPOLAMA" -c "$TABLO_KAP" --prefix "doluluk/" \
+  --auth-mode login --query "[].name" -o tsv | tail -3)
+printf "%-12s %8s %14s %7s %14s  %s\n" tarih tamlik canli_otopark hatali atlanan_dosya surum
+for ad in $SON_GUNLER; do
+  az storage blob metadata show --account-name "$DEPOLAMA" -c "$TABLO_KAP" -n "$ad" \
+    --auth-mode login -o tsv \
+    --query "[tarih, tamlik, canli_otopark, hatali, atlanan_dosya, surum]" \
+    2>/dev/null | {
+      IFS=$'\t' read -r tarih tamlik canli hatali atlanan surum || true
+      printf "%-12s %8s %14s %7s %14s  %s\n" "${tarih:-$ad}" "${tamlik:--}" "${canli:--}" \
+        "${hatali:--}" "${atlanan:--}" "${surum:-(özet yok)}"
+    }
+done

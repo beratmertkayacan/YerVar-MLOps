@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Adım 6 — İlk alarmlar: veri gelmezse e-posta at.
 #
-# Üç kural var, üçü de Log Analytics'teki log satırlarını sayıyor:
+# Dört kural var, hepsi Log Analytics'teki log satırlarını sayıyor:
 #
 #   alarm-toplayici-sessiz   Son 30 dakikada en az EN_AZ_OTOPARK kayıtlı hiç tur
 #                            yazılmadıysa. Sebebi ne olursa olsun veri gelmiyor
@@ -17,7 +17,11 @@
 #                            değişmiş, kayıt sayısı düşmüş ya da istek reddediliyor
 #                            (4xx). Yanıtın kendisi ham/hatali/ altında duruyor.
 #
-# İlki her şeyi yakalar ama sebebini söylemez. Diğer ikisi sebebi söyler. Sessizlik
+#   alarm-gece-isi           Son 26 saatte hiç GECE_BITTI yoksa (gece tablo işi
+#                            çalışmadı ya da yarıda öldü) VEYA o pencerede bir
+#                            GUN_HATALI ya da GUN_VERI_YOK varsa. Saatte bir bakıyor.
+#
+# İlk üçü toplayıcı (L0) için. İlki her şeyi yakalar ama sebebini söylemez. Diğer ikisi sebebi söyler. Sessizlik
 # kesinti ya da geçersiz yanıtla birlikte gelirse sorun İSPARK'ta, tek başına
 # gelirse bizde.
 #
@@ -57,31 +61,49 @@ GRUP_YERI=$(az monitor action-group show -n "$EYLEM_GRUBU" -g "$KG" --query loca
   exit 1
 }
 
+# Gece işi alarmı GECE_BITTI satırının yokluğuna bakıyor. Hiç böyle satır yokken
+# kurulursa ilk saatte yanlış alarm verir. Önce Log Analytics'te arıyoruz; yoksa
+# hiçbir kurala dokunmadan duruyoruz. (Satır, Adım 2 imajıyla gece işi bir kez
+# çalışınca oluşuyor: az containerapp job start -n $IS_TABLO -g $KG)
+BITTI=$(az monitor log-analytics query -w "$ALAN_KIMLIK" --timespan P2D \
+  --analytics-query 'ContainerAppConsoleLogs_CL | where Log_s has "GECE_BITTI" | take 1' \
+  --query "length(@)" -o tsv)
+if [ "$BITTI" = "0" ]; then
+  echo "HATA: son 2 günde hiç GECE_BITTI satırı yok. Önce gece işini bir kez çalıştır:"
+  echo "    az containerapp job start -n $IS_TABLO -g $KG"
+  exit 1
+fi
+echo "▶ Loglarda GECE_BITTI var, gece işi alarmı kurulabilir"
+
 # Bir kural oluşturur. Varsa aynı değerlerle günceller.
 #   $1 ad   $2 açıklama   $3 koşul   $4 sorgu   $5 önem (0 kritik ... 4 bilgi)
+#   $6 sıklık (varsayılan 15m)   $7 pencere (varsayılan 30m)
+# Sıklık fiyatı belirliyor: 15 dakika ve daha seyrek en ucuz kademe.
+# --auto-mitigate true: kural "durumlu" (stateful). Arıza sürdükçe tekrar tekrar
+# e-posta gelmiyor; bir kez "tetiklendi", koşul kalkınca bir kez "çözüldü".
 kural_kur() {
+  local siklik="${6:-15m}" pencere="${7:-30m}"
   if az monitor scheduled-query show -n "$1" -g "$KG" -o none 2>/dev/null; then
     echo "▶ Kural var, güncelleniyor: $1"
     az monitor scheduled-query update -n "$1" -g "$KG" \
       --description "$2" \
       --condition "$3" \
       --condition-query sorgu="$4" \
-      --evaluation-frequency 15m --window-size 30m \
-      --severity "$5" \
+      --evaluation-frequency "$siklik" --window-size "$pencere" \
+      --severity "$5" --auto-mitigate true \
       --action-groups "$GRUP_ID" \
       -o none
     return
   fi
   echo "▶ Kural oluşturuluyor: $1"
-  # Her 15 dakikada bir son 30 dakikaya bakar. Logların Log Analytics'e
-  # düşmesi birkaç dakika sürüyor, bu yüzden pencereyi geniş tuttuk.
+  # Pencere sıklıktan geniş: logların Log Analytics'e düşmesi birkaç dakika sürüyor.
   az monitor scheduled-query create -n "$1" -g "$KG" \
     --scopes "$ALAN_ID" \
     --description "$2" \
     --condition "$3" \
     --condition-query sorgu="$4" \
-    --evaluation-frequency 15m --window-size 30m \
-    --severity "$5" \
+    --evaluation-frequency "$siklik" --window-size "$pencere" \
+    --severity "$5" --auto-mitigate true \
     --action-groups "$GRUP_ID" \
     -o none
 }
@@ -108,7 +130,18 @@ kural_kur alarm-kaynak-gecersiz \
   'ContainerAppConsoleLogs_CL | where Log_s has "KAYNAK_GECERSIZ"' \
   2
 
+# Tek sorgu, tek satır, boyut (dimension) yok: tek zaman serisi, tek ücret.
+# Sorun yoksa satır dönmüyor; sorun varsa bir satır (bitti ve sorun sayılarıyla).
+# Zaman aralığını kuralın penceresi (26 saat) veriyor, sorguda ago() yok.
+# 26 saat: iş her gece 00:30 UTC'de bitiyor, iki çalıştırma arası 24 saat;
+# 2 saat pay logların gecikmesi ve uzun süren bir gece için.
+kural_kur alarm-gece-isi \
+  "Gece tablo işi 26 saattir bitmedi ya da bir günü yazamadı (GUN_HATALI, GUN_VERI_YOK)" \
+  "count 'sorgu' > 0" \
+  'let bitti = toscalar(ContainerAppConsoleLogs_CL | where Log_s has "GECE_BITTI" | count); let sorun = toscalar(ContainerAppConsoleLogs_CL | where Log_s has "GUN_HATALI" or Log_s has "GUN_VERI_YOK" | count); print gece_bitti = bitti, gun_sorunu = sorun | where gece_bitti == 0 or gun_sorunu > 0' \
+  1 1h 26h
+
 echo
 echo "✓ Bitti. Kurallar:"
 az monitor scheduled-query list -g "$KG" -o table \
-  --query "[].{ad:name, acik:enabled, onem:severity, siklik:evaluationFrequency}"
+  --query "[].{ad:name, acik:enabled, onem:severity, siklik:evaluationFrequency, pencere:windowSize}"
