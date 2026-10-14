@@ -1,0 +1,20 @@
+{
+  "rules": [
+    {
+      "name": "tablo-eski-surumleri-sil",
+      "enabled": true,
+      "type": "Lifecycle",
+      "definition": {
+        "filters": {
+          "blobTypes": ["blockBlob"],
+          "prefixMatch": ["tablo/"]
+        },
+        "actions": {
+          "version": {
+            "delete": { "daysAfterCreationGreaterThan": 30 }
+          }
+        }
+      }
+    }
+  ]
+}

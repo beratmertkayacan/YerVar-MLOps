@@ -31,6 +31,28 @@ echo "▶ Blob kabı oluşturuluyor: $KAP"
 az storage container-rm create --storage-account "$DEPOLAMA" -g "$KG" -n "$KAP" -o none \
   || echo "  (kap zaten var)"
 
+# Silmeye karşı koruma. Ham veri geri gelmeyen bir veri: İSPARK geçmiş
+# sunmuyor, kaybolan tur sonsuza kadar kaybolur.
+#   silinen blob ve kap 14 gün boyunca geri getirilebilir (soft delete)
+#   versioning açık: bir blob değişirse ya da silinirse eski hali sürüm
+#   olarak kalır. Ham kapta üzerine yazma kodda zaten kapalı, orada sürüm
+#   pek oluşmuyor. Sürümler daha çok tablo kabında birikiyor, çünkü tablo
+#   işi aynı günü yeniden çalıştırınca dosyanın üzerine yazıyor.
+echo "▶ Silme koruması ve sürümleme açılıyor"
+az storage account blob-service-properties update \
+  --account-name "$DEPOLAMA" -g "$KG" \
+  --enable-delete-retention true --delete-retention-days 14 \
+  --enable-container-delete-retention true --container-delete-retention-days 14 \
+  --enable-versioning true -o none
+
+# Sürümler sonsuza kadar birikmesin: tablo kabındaki eski sürümler 30 gün
+# sonra siliniyor. Kural sadece "tablo/" önekine bakıyor; ham kaba ve
+# ham/hatali/ altına bilerek kural yok, oradaki hiçbir şey kendiliğinden silinmiyor.
+echo "▶ Yaşam döngüsü kuralı yükleniyor: yasam_dongusu.json"
+az storage account management-policy create \
+  --account-name "$DEPOLAMA" -g "$KG" \
+  --policy @"$(dirname "$0")/yasam_dongusu.json" -o none
+
 # Veri düzlemi yetkisi: aboneliğin sahibi olmak blob OKUMAYA yetmez.
 # Veriye erişim ayrı bir rolle verilir.
 echo "▶ Kendine 'Storage Blob Data Contributor' rolü veriliyor"
