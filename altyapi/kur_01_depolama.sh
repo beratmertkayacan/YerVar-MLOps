@@ -8,6 +8,7 @@
 
 set -euo pipefail                       # hata olursa dur, tanımsız değişkende dur
 source "$(dirname "$0")/degiskenler.sh"
+source "$(dirname "$0")/ortak.sh"
 
 echo "▶ Abonelik: $(az account show --query name -o tsv)"
 
@@ -58,9 +59,7 @@ az storage account management-policy create \
 echo "▶ Kendine 'Storage Blob Data Contributor' rolü veriliyor"
 DEPOLAMA_ID=$(az storage account show -n "$DEPOLAMA" -g "$KG" --query id -o tsv)
 BEN=$(az ad signed-in-user show --query id -o tsv)
-az role assignment create --role "Storage Blob Data Contributor" \
-  --assignee-object-id "$BEN" --assignee-principal-type User \
-  --scope "$DEPOLAMA_ID" -o none 2>/dev/null || echo "  (rol zaten var)"
+rol_ver "$BEN" "Storage Blob Data Contributor" "$DEPOLAMA_ID" User
 
 echo
 echo "✓ Bitti. Rolün yayılması 1-5 dakika sürebilir. Sonra sırayla:"

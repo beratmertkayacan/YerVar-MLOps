@@ -1,4 +1,4 @@
-# kur_02, kur_03 ve kur_05'in ortak kullandığı küçük yardımcılar.
+# kur_01, kur_02, kur_03 ve kur_05'in ortak kullandığı küçük yardımcılar.
 # Tek başına çalıştırılmaz, script'lerin başında degiskenler.sh'den sonra
 # source edilir:  source "$(dirname "$0")/ortak.sh"
 
@@ -24,6 +24,8 @@ imaj_hazir_mi() {
 # dokunmaz. Atama başarısız olursa script durur. Eskiden her hata
 # "rol zaten var" diye yutuluyordu, gerçek bir yetki hatası da gizleniyordu.
 #   $1 kimliğin principalId'si   $2 rol adı   $3 kapsam (scope)
+#   $4 kimlik türü, verilmezse ServicePrincipal (işler ve yönetilen kimlikler).
+#      Kendi kullanıcın için User.
 rol_ver() {
   local adet
   adet=$(az role assignment list --assignee-object-id "$1" --role "$2" --scope "$3" \
@@ -33,7 +35,7 @@ rol_ver() {
     return
   fi
   az role assignment create --assignee-object-id "$1" \
-    --assignee-principal-type ServicePrincipal \
+    --assignee-principal-type "${4:-ServicePrincipal}" \
     --role "$2" --scope "$3" -o none
   echo "  ($2 verildi)"
 }
