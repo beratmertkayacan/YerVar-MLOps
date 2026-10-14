@@ -12,6 +12,7 @@ Bu script en son blob'u indirir, açar ve tablo halinde yazar.
 import argparse
 import gzip
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -24,6 +25,9 @@ from azure.identity import DefaultAzureCredential  # noqa: E402
 from azure.storage.blob import ContainerClient  # noqa: E402
 
 from yervar import ayarlar  # noqa: E402
+
+# Turlar YYYY/MM/DD/ altında. hatali/ gibi başka önekleri saymıyoruz.
+TUR_ADI = re.compile(r"^\d{4}/\d{2}/\d{2}/")
 
 
 def kap_baglan() -> ContainerClient:
@@ -47,7 +51,7 @@ def main() -> None:
 
     # Blob adları zaman damgalı olduğu için alfabetik sıralama = zaman sırası.
     # UTC ve sabit genişlikli biçim seçmemizin bir faydası da bu.
-    bloblar = sorted(b.name for b in kap.list_blobs())
+    bloblar = sorted(b.name for b in kap.list_blobs() if TUR_ADI.match(b.name))
     if not bloblar:
         raise SystemExit("Kapta hiç blob yok.")
 
