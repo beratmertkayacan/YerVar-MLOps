@@ -29,6 +29,17 @@ DENEME_SAYISI = int(os.getenv("DENEME_SAYISI", "5"))
 # halde başarısız sayılan bir tur oldu (V-011).
 TUR_SURE_BUTCESI_SN = float(os.getenv("TUR_SURE_BUTCESI_SN", "150"))
 
+# Bir yanıtın geçerli tur sayılması için (toplama/istemci.py).
+# Liste normalde 243-247 otopark. 200 bunun yaklaşık %80'i: liste zamanla biraz
+# küçülebilir (V-012), ama yarım gelen bir yanıt bu sayının altında kalır.
+EN_AZ_OTOPARK = int(os.getenv("EN_AZ_OTOPARK", "200"))
+# Kayıtların en az bu oranında parkID, capacity, emptyCapacity ve isOpen tam sayı
+# olmalı. Tek tük bozuk kaydı L1 zaten işaretliyor; çoğu bozuksa İSPARK biçimi
+# değiştirmiş demektir. isOpen da zorunlu, çünkü L2'deki "acik" filtresi ona bağlı.
+ZORUNLU_ALAN_ORANI = float(os.getenv("ZORUNLU_ALAN_ORANI", "0.9"))
+# Geçersiz yanıtın gövdesi hatali/ altına en fazla bu kadar bayt saklanır.
+HATALI_GOVDE_EN_FAZLA_BAYT = int(os.getenv("HATALI_GOVDE_EN_FAZLA_BAYT", "1000000"))
+
 # Depolama
 # DEPO_TURU: "yerel" → diske yazar (geliştirme), "blob" → Azure Blob Storage'a yazar (bulut)
 DEPO_TURU = os.getenv("DEPO_TURU", "yerel")
@@ -80,6 +91,10 @@ KALIBRASYON_GUN = int(os.getenv("KALIBRASYON_GUN", "2"))
 MLFLOW_ADRES = os.getenv(
     "MLFLOW_TRACKING_URI", f"sqlite:///{(VERI_KOK / 'mlflow.db').as_posix()}"
 )
+
+# Kod sürümü: hangi imajın çalıştığını loglardan görebilmek için. İmajda
+# Dockerfile yazıyor (ör. 0.6-abc1234), yerelde "yerel" kalıyor.
+KOD_SURUMU = os.getenv("KOD_SURUMU", "yerel")
 
 # Günlük
 LOG_SEVIYESI = os.getenv("LOG_SEVIYESI", "INFO").upper()
