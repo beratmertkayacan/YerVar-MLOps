@@ -152,3 +152,132 @@ def test_hatali_yol_l1_onekinin_disinda() -> None:
     yol = hatali_yol(ORNEK_ZAMAN, "parklar")
     assert yol == "hatali/2026/09/17/14/parklar_20260917T143000Z.govde.gz"
     assert not yol.startswith("2026/")
+
+
+# --- koşullu yazma: tablo kabındaki ortak dosya (otoparklar) için ------------
+
+
+def test_yerel_kosullu_yazma_yoksa_olusturur(tmp_path: Path) -> None:
+    import hashlib
+
+    depo = YerelDepo(tmp_path)
+    assert depo.oku_etiketli("o/o.parquet") == (None, None)
+    depo.yaz_kosullu("o/o.parquet", b"bir", None)
+    veri, etiket = depo.oku_etiketli("o/o.parquet")
+    assert veri == b"bir"
+    assert etiket == hashlib.sha256(b"bir").hexdigest()
+
+
+def test_yerel_yoksa_olustur_baskasi_olusturduysa_reddeder(tmp_path: Path) -> None:
+    import pytest
+
+    from yervar.depolama.ham import CakismaHatasi
+
+    depo = YerelDepo(tmp_path)
+    depo.yaz_bayt("o.parquet", b"baskasinin")
+    with pytest.raises(CakismaHatasi):
+        depo.yaz_kosullu("o.parquet", b"benim", None)
+    assert depo.oku_bayt("o.parquet") == b"baskasinin"
+
+
+def test_yerel_okunduktan_sonra_degistiyse_reddeder(tmp_path: Path) -> None:
+    import pytest
+
+    from yervar.depolama.ham import CakismaHatasi
+
+    depo = YerelDepo(tmp_path)
+    depo.yaz_bayt("o.parquet", b"v1")
+    _, etiket = depo.oku_etiketli("o.parquet")
+    depo.yaz_bayt("o.parquet", b"v2")  # arada başka bir çalıştırma yazdı
+    with pytest.raises(CakismaHatasi):
+        depo.yaz_kosullu("o.parquet", b"v3", etiket)
+    assert depo.oku_bayt("o.parquet") == b"v2"
+
+    _, yeni = depo.oku_etiketli("o.parquet")
+    depo.yaz_kosullu("o.parquet", b"v3", yeni)
+    assert depo.oku_bayt("o.parquet") == b"v3"
+
+
+def test_yerel_etiket_icerige_bakar_boyuta_degil(tmp_path: Path) -> None:
+    depo = YerelDepo(tmp_path)
+    depo.yaz_bayt("a", b"aaaa")
+    depo.yaz_bayt("b", b"bbbb")  # aynı boyut, farklı içerik
+    assert depo.oku_etiketli("a")[1] != depo.oku_etiketli("b")[1]
+
+
+class EtiketliKap:
+    """Koşullu yüklemeyi taklit eden kap. Her yazmada ETag değişiyor."""
+
+    url = "https://sahte.blob.core.windows.net/tablo"
+
+    def __init__(self) -> None:
+        self.bloblar: dict[str, tuple[bytes, str]] = {}
+        self.sayac = 0
+        self.cagrilar: list[dict] = []
+
+    def download_blob(self, ad):
+        from azure.core.exceptions import ResourceNotFoundError
+
+        if ad not in self.bloblar:
+            raise ResourceNotFoundError("BlobNotFound")
+        veri, etag = self.bloblar[ad]
+
+        class Indirme:
+            class properties:  # noqa: N801  (SDK'daki adın aynısı)
+                pass
+
+            def readall(self):
+                return veri
+
+        indirme = Indirme()
+        indirme.properties.etag = etag
+        return indirme
+
+    def upload_blob(self, ad, veri, overwrite, metadata, etag=None, match_condition=None):
+        from azure.core.exceptions import ResourceExistsError, ResourceModifiedError
+
+        self.cagrilar.append({"overwrite": overwrite, "etag": etag, "kosul": match_condition})
+        if ad in self.bloblar and not overwrite:
+            raise ResourceExistsError("BlobAlreadyExists")
+        if etag is not None and self.bloblar.get(ad, (None, None))[1] != etag:
+            raise ResourceModifiedError("ConditionNotMet")
+        self.sayac += 1
+        self.bloblar[ad] = (veri, f'"0x{self.sayac}"')
+
+        class Yuklenen:
+            url = f"{EtiketliKap.url}/{ad}"
+
+        return Yuklenen()
+
+
+def test_blob_yoksa_olustur_overwrite_false_ile() -> None:
+    import pytest
+
+    from yervar.depolama.ham import CakismaHatasi
+
+    kap = EtiketliKap()
+    depo = sahte_blob_depo(kap, uzerine_yaz=True)
+    assert depo.oku_etiketli("o.parquet") == (None, None)
+    depo.yaz_kosullu("o.parquet", b"ilk", None)
+    assert kap.cagrilar[-1]["overwrite"] is False  # If-None-Match: *
+    # ikinci çalıştırma da "dosya yok" görmüştü: reddedilmeli
+    with pytest.raises(CakismaHatasi):
+        depo.yaz_kosullu("o.parquet", b"ikinci", None)
+    assert depo.oku_etiketli("o.parquet")[0] == b"ilk"
+
+
+def test_blob_etag_degistiyse_reddeder() -> None:
+    import pytest
+    from azure.core import MatchConditions
+
+    from yervar.depolama.ham import CakismaHatasi
+
+    kap = EtiketliKap()
+    depo = sahte_blob_depo(kap, uzerine_yaz=True)
+    depo.yaz_kosullu("o.parquet", b"v1", None)
+    _, etiket = depo.oku_etiketli("o.parquet")
+    depo.yaz_kosullu("o.parquet", b"v2", etiket)
+    assert kap.cagrilar[-1]["kosul"] == MatchConditions.IfNotModified
+    with pytest.raises(CakismaHatasi):
+        depo.yaz_kosullu("o.parquet", b"v3", etiket)  # eski etiket
+    assert depo.oku_etiketli("o.parquet")[0] == b"v2"

@@ -11,7 +11,9 @@ Kurallar:
    istenirse uyarı loglanır ve var olan dosya korunur.
 
 İki depo var ve ikisi de aynı dört metoda sahip (yaz, yaz_bayt, listele,
-oku_bayt): YerelDepo diske, BlobDepo Azure'a yazar. Kodun geri kalanı hangisiyle
+oku_bayt): YerelDepo diske, BlobDepo Azure'a yazar. Ayrıca koşullu yazma için
+iki metot var (oku_etiketli, yaz_kosullu); sadece tablo kabındaki tek ortak
+dosya (otoparklar) için kullanılıyor, toplayıcı kullanmıyor. Kodun geri kalanı hangisiyle
 konuştuğunu bilmez; depo_olustur() ayara bakıp doğru olanı verir. L1 (tablo.py)
 aynı sınıfları hem ham veriyi okumak hem tabloyu yazmak için kullanıyor. Tablo
 kabında üzerine yazma açık, çünkü bir gün tekrar işlenebilmeli.
@@ -21,6 +23,7 @@ Geçersiz yanıtlar "hatali/" önekiyle aynı ham kaba yazılır. L1 sadece
 """
 
 import gzip
+import hashlib
 import json
 import os
 from datetime import UTC, datetime
@@ -31,6 +34,11 @@ from yervar import ayarlar
 from yervar.gunluk import gunluk_al
 
 gunluk = gunluk_al(__name__)
+
+
+class CakismaHatasi(RuntimeError):
+    """Koşullu yazma reddedildi: dosya okunduğundan beri değişmiş ya da
+    "yoksa oluştur" denirken başkası oluşturmuş."""
 
 
 def simdi_utc() -> datetime:
@@ -125,6 +133,36 @@ class YerelDepo:
     def oku_bayt(self, goreli_yol: str) -> bytes:
         return (self.kok / goreli_yol).read_bytes()
 
+    # Koşullu yazma. Blob'daki ETag'in yerel taklidi: içeriğin sha256 özeti.
+    # Değişme zamanı ve boyut yetmiyor, aynı boyutta farklı içerik aynı saniyede
+    # yazılabilir. Yerel depo tek makinede deneme için; kontrol ile yazma
+    # arasında başka bir sürecin araya girmesine karşı tam koruma vermez.
+    def oku_etiketli(self, goreli_yol: str) -> tuple[bytes | None, str | None]:
+        """Dosyayı ve etiketini döndürür. Dosya yoksa (None, None)."""
+        hedef = self.kok / goreli_yol
+        if not hedef.exists():
+            return None, None
+        veri = hedef.read_bytes()
+        return veri, hashlib.sha256(veri).hexdigest()
+
+    def yaz_kosullu(
+        self, goreli_yol: str, veri: bytes, etiket: str | None,
+        meta: dict[str, Any] | None = None,
+    ) -> str:
+        """Dosya okunduğundan beri değişmediyse yazar, değiştiyse CakismaHatasi.
+
+        etiket None: dosya hiç yoksa oluştur. Bu arada biri oluşturduysa çakışma.
+        """
+        hedef = self.kok / goreli_yol
+        simdiki = hashlib.sha256(hedef.read_bytes()).hexdigest() if hedef.exists() else None
+        if simdiki != etiket:
+            raise CakismaHatasi(goreli_yol)
+        hedef.parent.mkdir(parents=True, exist_ok=True)
+        gecici = hedef.with_name(hedef.name + ".tmp")
+        gecici.write_bytes(veri)
+        os.replace(gecici, hedef)
+        return str(hedef)
+
 
 class BlobDepo:
     """Dosyaları Azure Blob Storage'a yazar ve okur (bulut ortamı).
@@ -189,6 +227,46 @@ class BlobDepo:
 
     def oku_bayt(self, goreli_yol: str) -> bytes:
         return self.kap.download_blob(goreli_yol).readall()
+
+    def oku_etiketli(self, goreli_yol: str) -> tuple[bytes | None, str | None]:
+        """Blob'u ve ETag'ini döndürür. Blob yoksa (None, None).
+
+        ETag, Azure'un blob her değiştiğinde yenilediği sürüm damgası.
+        """
+        from azure.core.exceptions import ResourceNotFoundError
+
+        try:
+            indirme = self.kap.download_blob(goreli_yol)
+        except ResourceNotFoundError:
+            return None, None
+        return indirme.readall(), indirme.properties.etag
+
+    def yaz_kosullu(
+        self, goreli_yol: str, veri: bytes, etiket: str | None,
+        meta: dict[str, Any] | None = None,
+    ) -> str:
+        """Blob okunduğundan beri değişmediyse yazar, değiştiyse CakismaHatasi.
+
+        etiket None: "yalnızca yoksa oluştur" (overwrite=False, If-None-Match: *).
+        İki çalıştırma aynı anda "dosya yok" görürse ikincisi reddedilir.
+        etiket varsa: "yalnızca değişmediyse yaz" (If-Match: etiket).
+        """
+        from azure.core import MatchConditions
+        from azure.core.exceptions import ResourceExistsError, ResourceModifiedError
+
+        try:
+            if etiket is None:
+                yuklenen = self.kap.upload_blob(
+                    goreli_yol, veri, overwrite=False, metadata=meta_temizle(meta)
+                )
+            else:
+                yuklenen = self.kap.upload_blob(
+                    goreli_yol, veri, overwrite=True, metadata=meta_temizle(meta),
+                    etag=etiket, match_condition=MatchConditions.IfNotModified,
+                )
+        except (ResourceExistsError, ResourceModifiedError) as hata:
+            raise CakismaHatasi(goreli_yol) from hata
+        return yuklenen.url
 
 
 def depo_olustur(
