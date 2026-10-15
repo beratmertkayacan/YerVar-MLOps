@@ -132,14 +132,17 @@ kural_kur alarm-kaynak-gecersiz \
 
 # Tek sorgu, tek satır, boyut (dimension) yok: tek zaman serisi, tek ücret.
 # Sorun yoksa satır dönmüyor; sorun varsa bir satır (bitti ve sorun sayılarıyla).
-# Zaman aralığını kuralın penceresi (26 saat) veriyor, sorguda ago() yok.
 # 26 saat: iş her gece 00:30 UTC'de bitiyor, iki çalıştırma arası 24 saat;
 # 2 saat pay logların gecikmesi ve uzun süren bir gece için.
+# Kural penceresi 26 saat olamıyor: Azure sadece 5, 10, 15, 30, 45, 60, 120, 180,
+# 240, 300, 360, 720, 1440 ve 2880 dakikayı kabul ediyor (15 Ekim'de 1560 reddedildi).
+# 24 saat çok dar (gece işinin birkaç saniye gecikmesi yanlış alarm verir), bu
+# yüzden pencere 48 saat ve 26 saati sorgunun kendisi ago(26h) ile süzüyor.
 kural_kur alarm-gece-isi \
   "Gece tablo işi 26 saattir bitmedi ya da bir günü yazamadı (GUN_HATALI, GUN_VERI_YOK)" \
   "count 'sorgu' > 0" \
-  'let bitti = toscalar(ContainerAppConsoleLogs_CL | where Log_s has "GECE_BITTI" | count); let sorun = toscalar(ContainerAppConsoleLogs_CL | where Log_s has "GUN_HATALI" or Log_s has "GUN_VERI_YOK" | count); print gece_bitti = bitti, gun_sorunu = sorun | where gece_bitti == 0 or gun_sorunu > 0' \
-  1 1h 26h
+  'let bitti = toscalar(ContainerAppConsoleLogs_CL | where TimeGenerated > ago(26h) | where Log_s has "GECE_BITTI" | count); let sorun = toscalar(ContainerAppConsoleLogs_CL | where TimeGenerated > ago(26h) | where Log_s has "GUN_HATALI" or Log_s has "GUN_VERI_YOK" | count); print gece_bitti = bitti, gun_sorunu = sorun | where gece_bitti == 0 or gun_sorunu > 0' \
+  1 1h 48h
 
 echo
 echo "✓ Bitti. Kurallar:"
