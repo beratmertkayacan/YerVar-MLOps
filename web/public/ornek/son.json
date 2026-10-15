@@ -1,0 +1,631 @@
+{
+  "sema_surumu": "0.1.1",
+  "uretim_utc": "2026-10-16T05:06:38Z",
+  "veri_utc": "2026-10-16T05:05:00Z",
+  "saat_dilimi": "Europe/Istanbul",
+  "tazelik_esigi_dk": 15,
+  "gun_tipi": {
+    "tarih_yerel": "2026-10-16",
+    "kod": "is_gunu",
+    "ad": null,
+    "yarim_gun_baslangic_yerel": null,
+    "model_taniyor": true
+  },
+  "ufuklar": [
+    {
+      "ufuk_dk": 15,
+      "hedef_utc": "2026-10-16T05:20:00Z",
+      "gun_tipi_kod": "is_gunu"
+    },
+    {
+      "ufuk_dk": 30,
+      "hedef_utc": "2026-10-16T05:35:00Z",
+      "gun_tipi_kod": "is_gunu"
+    },
+    {
+      "ufuk_dk": 60,
+      "hedef_utc": "2026-10-16T06:05:00Z",
+      "gun_tipi_kod": "is_gunu"
+    },
+    {
+      "ufuk_dk": 120,
+      "hedef_utc": "2026-10-16T07:05:00Z",
+      "gun_tipi_kod": "is_gunu"
+    }
+  ],
+  "esikler": {
+    "dolu_oran": 0.05,
+    "dolu_en_fazla_arac": 10,
+    "dolu_olasilik_esigi": 0.5,
+    "bant_alt": 0.2,
+    "bant_ust": 0.6,
+    "bant_esikleri_gecici": true
+  },
+  "aralik_duzeyi": 0.8,
+  "model": {
+    "surum": "yervar-doluluk:4",
+    "olasilik_surum": "yervar-dolu:4",
+    "kod_surumu": "0.9-1a2b3c4",
+    "egitim_bitis_tarihi": "2026-10-15",
+    "karne": [
+      {
+        "ufuk_dk": 15,
+        "mae_arac": 2.4,
+        "beceri": 0.08,
+        "brier": 0.035
+      },
+      {
+        "ufuk_dk": 30,
+        "mae_arac": 3.9,
+        "beceri": 0.14,
+        "brier": 0.05
+      },
+      {
+        "ufuk_dk": 60,
+        "mae_arac": 6.1,
+        "beceri": 0.21,
+        "brier": 0.068
+      },
+      {
+        "ufuk_dk": 120,
+        "mae_arac": 9.0,
+        "beceri": 0.27,
+        "brier": 0.091
+      }
+    ],
+    "bant_kalibrasyonu": [
+      {
+        "bant": "yer_var_olasi",
+        "ort_olasilik": 0.05,
+        "gercek_dolu_orani": 0.06,
+        "ornek_sayisi": 41210
+      },
+      {
+        "bant": "belirsiz",
+        "ort_olasilik": 0.37,
+        "gercek_dolu_orani": 0.4,
+        "ornek_sayisi": 5320
+      },
+      {
+        "bant": "dolu_olasi",
+        "ort_olasilik": 0.82,
+        "gercek_dolu_orani": 0.79,
+        "ornek_sayisi": 3870
+      }
+    ]
+  },
+  "veri_sagligi": {
+    "tarih": "2026-10-15",
+    "tur": 287,
+    "tamlik": 99.7,
+    "canli_otopark": 112
+  },
+  "kapsam_sayilari": {
+    "model": 7,
+    "basit": 2,
+    "veri_yok": 3,
+    "gosterme": 2,
+    "toplam": 14
+  },
+  "otoparklar": [
+    {
+      "park_id": 1021,
+      "ad": "Kadıköy Rıhtım Katlı Otoparkı",
+      "ilce": "KADIKÖY",
+      "lat": 40.99172,
+      "lng": 29.02441,
+      "kapasite": 420,
+      "tip": "KAPALI OTOPARK",
+      "calisma_saatleri": "24 Saat",
+      "kapsam": "model",
+      "kapsam_sebebi": null,
+      "tazelik": "taze",
+      "son_olcum": {
+        "zaman_utc": "2026-10-16T05:05:00Z",
+        "bos_yer": 96,
+        "acik": true,
+        "dolu": false
+      },
+      "tahminler": [
+        {
+          "ufuk_dk": 15,
+          "bos_yer": 81,
+          "bos_yer_alt": 68,
+          "bos_yer_ust": 93,
+          "dolu_olasiligi": 0.02,
+          "bant": "yer_var_olasi"
+        },
+        {
+          "ufuk_dk": 30,
+          "bos_yer": 66,
+          "bos_yer_alt": 50,
+          "bos_yer_ust": 82,
+          "dolu_olasiligi": 0.04,
+          "bant": "yer_var_olasi"
+        },
+        {
+          "ufuk_dk": 60,
+          "bos_yer": 44,
+          "bos_yer_alt": 24,
+          "bos_yer_ust": 63,
+          "dolu_olasiligi": 0.1,
+          "bant": "yer_var_olasi"
+        },
+        {
+          "ufuk_dk": 120,
+          "bos_yer": 30,
+          "bos_yer_alt": 8,
+          "bos_yer_ust": 55,
+          "dolu_olasiligi": 0.22,
+          "bant": "belirsiz"
+        }
+      ]
+    },
+    {
+      "park_id": 1034,
+      "ad": "Mecidiyeköy Katlı Otoparkı",
+      "ilce": "ŞİŞLİ",
+      "lat": 41.06722,
+      "lng": 28.99459,
+      "kapasite": 380,
+      "tip": "KAPALI OTOPARK",
+      "calisma_saatleri": "24 Saat",
+      "kapsam": "model",
+      "kapsam_sebebi": null,
+      "tazelik": "taze",
+      "son_olcum": {
+        "zaman_utc": "2026-10-16T05:05:00Z",
+        "bos_yer": 41,
+        "acik": true,
+        "dolu": false
+      },
+      "tahminler": [
+        {
+          "ufuk_dk": 15,
+          "bos_yer": 29,
+          "bos_yer_alt": 19,
+          "bos_yer_ust": 39,
+          "dolu_olasiligi": 0.12,
+          "bant": "yer_var_olasi"
+        },
+        {
+          "ufuk_dk": 30,
+          "bos_yer": 18,
+          "bos_yer_alt": 7,
+          "bos_yer_ust": 30,
+          "dolu_olasiligi": 0.34,
+          "bant": "belirsiz"
+        },
+        {
+          "ufuk_dk": 60,
+          "bos_yer": 9,
+          "bos_yer_alt": 2,
+          "bos_yer_ust": 21,
+          "dolu_olasiligi": 0.58,
+          "bant": "belirsiz"
+        },
+        {
+          "ufuk_dk": 120,
+          "bos_yer": 6,
+          "bos_yer_alt": 0,
+          "bos_yer_ust": 17,
+          "dolu_olasiligi": 0.71,
+          "bant": "dolu_olasi"
+        }
+      ]
+    },
+    {
+      "park_id": 1047,
+      "ad": "Beşiktaş Barbaros Otoparkı",
+      "ilce": "BEŞİKTAŞ",
+      "lat": 41.04221,
+      "lng": 29.00668,
+      "kapasite": 150,
+      "tip": "AÇIK OTOPARK",
+      "calisma_saatleri": "07:00-23:00",
+      "kapsam": "model",
+      "kapsam_sebebi": null,
+      "tazelik": "taze",
+      "son_olcum": {
+        "zaman_utc": "2026-10-16T05:05:00Z",
+        "bos_yer": 12,
+        "acik": true,
+        "dolu": false
+      },
+      "tahminler": [
+        {
+          "ufuk_dk": 15,
+          "bos_yer": 8,
+          "bos_yer_alt": 3,
+          "bos_yer_ust": 13,
+          "dolu_olasiligi": 0.46,
+          "bant": "belirsiz"
+        },
+        {
+          "ufuk_dk": 30,
+          "bos_yer": 5,
+          "bos_yer_alt": 1,
+          "bos_yer_ust": 10,
+          "dolu_olasiligi": 0.67,
+          "bant": "dolu_olasi"
+        },
+        {
+          "ufuk_dk": 60,
+          "bos_yer": 3,
+          "bos_yer_alt": 0,
+          "bos_yer_ust": 8,
+          "dolu_olasiligi": 0.81,
+          "bant": "dolu_olasi"
+        },
+        {
+          "ufuk_dk": 120,
+          "bos_yer": 4,
+          "bos_yer_alt": 0,
+          "bos_yer_ust": 11,
+          "dolu_olasiligi": 0.78,
+          "bant": "dolu_olasi"
+        }
+      ]
+    },
+    {
+      "park_id": 1052,
+      "ad": "Üsküdar Meydan Otoparkı",
+      "ilce": "ÜSKÜDAR",
+      "lat": 41.02604,
+      "lng": 29.01532,
+      "kapasite": 210,
+      "tip": "AÇIK OTOPARK",
+      "calisma_saatleri": "24 Saat",
+      "kapsam": "model",
+      "kapsam_sebebi": null,
+      "tazelik": "taze",
+      "son_olcum": {
+        "zaman_utc": "2026-10-16T05:05:00Z",
+        "bos_yer": 58,
+        "acik": true,
+        "dolu": false
+      },
+      "tahminler": [
+        {
+          "ufuk_dk": 15,
+          "bos_yer": 52,
+          "bos_yer_alt": 44,
+          "bos_yer_ust": 60,
+          "dolu_olasiligi": 0.01,
+          "bant": "yer_var_olasi"
+        },
+        {
+          "ufuk_dk": 30,
+          "bos_yer": 47,
+          "bos_yer_alt": 36,
+          "bos_yer_ust": 58,
+          "dolu_olasiligi": 0.03,
+          "bant": "yer_var_olasi"
+        },
+        {
+          "ufuk_dk": 60,
+          "bos_yer": 41,
+          "bos_yer_alt": 27,
+          "bos_yer_ust": 55,
+          "dolu_olasiligi": 0.06,
+          "bant": "yer_var_olasi"
+        },
+        {
+          "ufuk_dk": 120,
+          "bos_yer": 45,
+          "bos_yer_alt": 27,
+          "bos_yer_ust": 63,
+          "dolu_olasiligi": 0.07,
+          "bant": "yer_var_olasi"
+        }
+      ]
+    },
+    {
+      "park_id": 1068,
+      "ad": "Ataşehir Finans Merkezi Otoparkı",
+      "ilce": "ATAŞEHİR",
+      "lat": 40.99231,
+      "lng": 29.12437,
+      "kapasite": 600,
+      "tip": "KAPALI OTOPARK",
+      "calisma_saatleri": "24 Saat",
+      "kapsam": "model",
+      "kapsam_sebebi": null,
+      "tazelik": "taze",
+      "son_olcum": {
+        "zaman_utc": "2026-10-16T05:05:00Z",
+        "bos_yer": 310,
+        "acik": true,
+        "dolu": false
+      },
+      "tahminler": [
+        {
+          "ufuk_dk": 15,
+          "bos_yer": 280,
+          "bos_yer_alt": 262,
+          "bos_yer_ust": 297,
+          "dolu_olasiligi": 0.0,
+          "bant": "yer_var_olasi"
+        },
+        {
+          "ufuk_dk": 30,
+          "bos_yer": 246,
+          "bos_yer_alt": 221,
+          "bos_yer_ust": 271,
+          "dolu_olasiligi": 0.0,
+          "bant": "yer_var_olasi"
+        },
+        {
+          "ufuk_dk": 60,
+          "bos_yer": 190,
+          "bos_yer_alt": 155,
+          "bos_yer_ust": 226,
+          "dolu_olasiligi": 0.01,
+          "bant": "yer_var_olasi"
+        },
+        {
+          "ufuk_dk": 120,
+          "bos_yer": 120,
+          "bos_yer_alt": 70,
+          "bos_yer_ust": 171,
+          "dolu_olasiligi": 0.03,
+          "bant": "yer_var_olasi"
+        }
+      ]
+    },
+    {
+      "park_id": 1075,
+      "ad": "Bakırköy İncirli Otoparkı",
+      "ilce": "BAKIRKÖY",
+      "lat": 40.99047,
+      "lng": 28.87436,
+      "kapasite": 95,
+      "tip": "AÇIK OTOPARK",
+      "calisma_saatleri": "24 Saat",
+      "kapsam": "model",
+      "kapsam_sebebi": null,
+      "tazelik": "taze",
+      "son_olcum": {
+        "zaman_utc": "2026-10-16T05:05:00Z",
+        "bos_yer": 22,
+        "acik": true,
+        "dolu": false
+      },
+      "tahminler": [
+        {
+          "ufuk_dk": 15,
+          "bos_yer": 19,
+          "bos_yer_alt": 14,
+          "bos_yer_ust": 24,
+          "dolu_olasiligi": 0.03,
+          "bant": "yer_var_olasi"
+        },
+        {
+          "ufuk_dk": 30,
+          "bos_yer": 16,
+          "bos_yer_alt": 10,
+          "bos_yer_ust": 22,
+          "dolu_olasiligi": 0.07,
+          "bant": "yer_var_olasi"
+        },
+        {
+          "ufuk_dk": 60,
+          "bos_yer": 12,
+          "bos_yer_alt": 5,
+          "bos_yer_ust": 19,
+          "dolu_olasiligi": 0.18,
+          "bant": "yer_var_olasi"
+        },
+        {
+          "ufuk_dk": 120,
+          "bos_yer": 10,
+          "bos_yer_alt": 2,
+          "bos_yer_ust": 19,
+          "dolu_olasiligi": 0.29,
+          "bant": "belirsiz"
+        }
+      ]
+    },
+    {
+      "park_id": 1089,
+      "ad": "Eminönü Otoparkı",
+      "ilce": "FATİH",
+      "lat": 41.01702,
+      "lng": 28.97004,
+      "kapasite": 130,
+      "tip": "AÇIK OTOPARK",
+      "calisma_saatleri": "24 Saat",
+      "kapsam": "model",
+      "kapsam_sebebi": null,
+      "tazelik": "eski",
+      "son_olcum": {
+        "zaman_utc": "2026-10-16T04:20:00Z",
+        "bos_yer": 37,
+        "acik": true,
+        "dolu": false
+      },
+      "tahminler": null
+    },
+    {
+      "park_id": 1093,
+      "ad": "Sarıyer Sahil Otoparkı",
+      "ilce": "SARIYER",
+      "lat": 41.16702,
+      "lng": 29.05031,
+      "kapasite": 80,
+      "tip": "AÇIK OTOPARK",
+      "calisma_saatleri": "08:00-22:00",
+      "kapsam": "basit",
+      "kapsam_sebebi": "model_kiyasi_gecemedi",
+      "tazelik": "taze",
+      "son_olcum": {
+        "zaman_utc": "2026-10-16T05:05:00Z",
+        "bos_yer": 47,
+        "acik": true,
+        "dolu": false
+      },
+      "tahminler": [
+        {
+          "ufuk_dk": 15,
+          "bos_yer": 47,
+          "bos_yer_alt": null,
+          "bos_yer_ust": null,
+          "dolu_olasiligi": null,
+          "bant": null
+        },
+        {
+          "ufuk_dk": 30,
+          "bos_yer": 47,
+          "bos_yer_alt": null,
+          "bos_yer_ust": null,
+          "dolu_olasiligi": null,
+          "bant": null
+        },
+        {
+          "ufuk_dk": 60,
+          "bos_yer": 47,
+          "bos_yer_alt": null,
+          "bos_yer_ust": null,
+          "dolu_olasiligi": null,
+          "bant": null
+        },
+        {
+          "ufuk_dk": 120,
+          "bos_yer": 47,
+          "bos_yer_alt": null,
+          "bos_yer_ust": null,
+          "dolu_olasiligi": null,
+          "bant": null
+        }
+      ]
+    },
+    {
+      "park_id": 1101,
+      "ad": "Maltepe Sahil Otoparkı",
+      "ilce": "MALTEPE",
+      "lat": 40.92197,
+      "lng": 29.13104,
+      "kapasite": 340,
+      "tip": "AÇIK OTOPARK",
+      "calisma_saatleri": "24 Saat",
+      "kapsam": "basit",
+      "kapsam_sebebi": "kismen_canli",
+      "tazelik": "taze",
+      "son_olcum": {
+        "zaman_utc": "2026-10-16T05:05:00Z",
+        "bos_yer": 201,
+        "acik": true,
+        "dolu": false
+      },
+      "tahminler": [
+        {
+          "ufuk_dk": 15,
+          "bos_yer": 201,
+          "bos_yer_alt": null,
+          "bos_yer_ust": null,
+          "dolu_olasiligi": null,
+          "bant": null
+        },
+        {
+          "ufuk_dk": 30,
+          "bos_yer": 201,
+          "bos_yer_alt": null,
+          "bos_yer_ust": null,
+          "dolu_olasiligi": null,
+          "bant": null
+        },
+        {
+          "ufuk_dk": 60,
+          "bos_yer": 201,
+          "bos_yer_alt": null,
+          "bos_yer_ust": null,
+          "dolu_olasiligi": null,
+          "bant": null
+        },
+        {
+          "ufuk_dk": 120,
+          "bos_yer": 201,
+          "bos_yer_alt": null,
+          "bos_yer_ust": null,
+          "dolu_olasiligi": null,
+          "bant": null
+        }
+      ]
+    },
+    {
+      "park_id": 1112,
+      "ad": "Tepebaşı Katlı Otoparkı",
+      "ilce": "BEYOĞLU",
+      "lat": 41.03303,
+      "lng": 28.97404,
+      "kapasite": 260,
+      "tip": "KAPALI OTOPARK",
+      "calisma_saatleri": "24 Saat",
+      "kapsam": "veri_yok",
+      "kapsam_sebebi": "canli_degil",
+      "tazelik": null,
+      "son_olcum": null,
+      "tahminler": null
+    },
+    {
+      "park_id": 1120,
+      "ad": "Kartal Merkez Otoparkı",
+      "ilce": "KARTAL",
+      "lat": 40.88812,
+      "lng": 29.18906,
+      "kapasite": 175,
+      "tip": "AÇIK OTOPARK",
+      "calisma_saatleri": "24 Saat",
+      "kapsam": "veri_yok",
+      "kapsam_sebebi": "canli_degil",
+      "tazelik": null,
+      "son_olcum": null,
+      "tahminler": null
+    },
+    {
+      "park_id": 1134,
+      "ad": "Zeytinburnu Sahil Otoparkı",
+      "ilce": "ZEYTİNBURNU",
+      "lat": 40.98907,
+      "lng": 28.90302,
+      "kapasite": 220,
+      "tip": "AÇIK OTOPARK",
+      "calisma_saatleri": "24 Saat",
+      "kapsam": "veri_yok",
+      "kapsam_sebebi": "canli_degil",
+      "tazelik": null,
+      "son_olcum": null,
+      "tahminler": null
+    },
+    {
+      "park_id": 1146,
+      "ad": "Eyüpsultan Meydan Otoparkı",
+      "ilce": "EYÜPSULTAN",
+      "lat": 41.04806,
+      "lng": 28.93402,
+      "kapasite": null,
+      "tip": "YOL ÜSTÜ",
+      "calisma_saatleri": null,
+      "kapsam": "gosterme",
+      "kapsam_sebebi": "liste_disi",
+      "tazelik": null,
+      "son_olcum": null,
+      "tahminler": null
+    },
+    {
+      "park_id": 1158,
+      "ad": "Esenler Otogar Otoparkı",
+      "ilce": "ESENLER",
+      "lat": 41.04103,
+      "lng": 28.89405,
+      "kapasite": 900,
+      "tip": "AÇIK OTOPARK",
+      "calisma_saatleri": "24 Saat",
+      "kapsam": "gosterme",
+      "kapsam_sebebi": "liste_disi",
+      "tazelik": null,
+      "son_olcum": null,
+      "tahminler": null
+    }
+  ]
+}

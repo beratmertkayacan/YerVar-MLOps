@@ -1,0 +1,65 @@
+/* Açık tema, "kamu hizmeti" tonu. Kontrastlar ölçüldü: metin ≥ 4,5:1, simge ve kenar ≥ 3:1. */
+:root {
+  color-scheme: light;
+
+  --renk-zemin: #f4f5f3;
+  --renk-yuzey: #ffffff;
+  --renk-yuzey-alt: #eef0ee;
+  --renk-metin: #15181b;
+  --renk-metin-ikincil: #4b5258;
+  --renk-kenar: #dcdfe2;
+  --renk-kenar-guclu: #6b7280;
+  --renk-marka: #0b5cad;
+  --renk-marka-acik: #e8f0fa;
+  --renk-vurgu: #0b5cad;
+
+  --renk-bant-yer: #009e73;
+  --renk-bant-yer-metin: #00704f;
+  --renk-bant-belirsiz: #8a5a00;
+  --renk-bant-dolu: #d55e00;
+  --renk-bant-dolu-metin: #b34700;
+  --renk-notr: #475569;
+  --renk-veri-yok: #5f6670;
+  --renk-uyari: #5c3d00;
+  --renk-uyari-zemin: #fff4d6;
+  --renk-hata: #8a1c14;
+  --renk-hata-zemin: #fdecea;
+
+  --harita-kara: #ebece6;
+  --harita-cizgi: #d5d7cf;
+
+  --yazi-ailesi: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --yazi-12: 0.75rem;
+  --yazi-14: 0.875rem;
+  --yazi-16: 1rem;
+  --yazi-20: 1.25rem;
+  --yazi-24: 1.5rem;
+  --yazi-32: 2rem;
+  --satir-yuksekligi: 1.4;
+
+  --bosluk-4: 0.25rem;
+  --bosluk-8: 0.5rem;
+  --bosluk-12: 0.75rem;
+  --bosluk-16: 1rem;
+  --bosluk-24: 1.5rem;
+  --bosluk-32: 2rem;
+  --bosluk-48: 3rem;
+
+  --kose-kucuk: 6px;
+  --kose-orta: 10px;
+  --kose-buyuk: 14px;
+  --kose-tam: 999px;
+
+  --golge-1: 0 1px 3px rgb(0 0 0 / 0.1);
+  --golge-2: 0 6px 18px rgb(0 0 0 / 0.16);
+
+  --dokunma: 48px;
+  --panel-genislik: 400px;
+  --sure-hareket: 150ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --sure-hareket: 0ms;
+  }
+}
