@@ -34,14 +34,19 @@ echo
 echo "== Tablo kabındaki son 3 günün özeti =="
 SON_GUNLER=$(az storage blob list --account-name "$DEPOLAMA" -c "$TABLO_KAP" --prefix "doluluk/" \
   --auth-mode login --query "[].name" -o tsv | tail -3)
+# Meta verisi olmayan alan az'de "None" olarak geliyor; tabloda "-" yazıyoruz.
+deger() { if [ -z "$1" ] || [ "$1" = "None" ]; then echo "-"; else echo "$1"; fi; }
 printf "%-12s %8s %14s %7s %14s  %s\n" tarih tamlik canli_otopark hatali atlanan_dosya surum
 for ad in $SON_GUNLER; do
+  # Çift köşeli parantez: tsv tek satır versin. Tek liste her değeri ayrı satıra
+  # yazıyordu ve sadece ilk değer (tarih) okunuyordu.
   az storage blob metadata show --account-name "$DEPOLAMA" -c "$TABLO_KAP" -n "$ad" \
     --auth-mode login -o tsv \
-    --query "[tarih, tamlik, canli_otopark, hatali, atlanan_dosya, surum]" \
+    --query "[[tarih, tamlik, canli_otopark, hatali, atlanan_dosya, surum]]" \
     2>/dev/null | {
       IFS=$'\t' read -r tarih tamlik canli hatali atlanan surum || true
-      printf "%-12s %8s %14s %7s %14s  %s\n" "${tarih:-$ad}" "${tamlik:--}" "${canli:--}" \
-        "${hatali:--}" "${atlanan:--}" "${surum:-(özet yok)}"
+      [ "$(deger "$surum")" = "-" ] && surum="(özet yok)"
+      printf "%-12s %8s %14s %7s %14s  %s\n" "$(deger "${tarih:-$ad}")" "$(deger "$tamlik")" \
+        "$(deger "$canli")" "$(deger "$hatali")" "$(deger "$atlanan")" "$surum"
     }
 done
