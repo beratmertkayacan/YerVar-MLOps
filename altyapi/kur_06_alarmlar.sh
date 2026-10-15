@@ -93,19 +93,39 @@ kural_kur() {
       --severity "$5" --auto-mitigate true \
       --action-groups "$GRUP_ID" \
       -o none
-    return
+  else
+    echo "▶ Kural oluşturuluyor: $1"
+    # Pencere sıklıktan geniş: logların Log Analytics'e düşmesi birkaç dakika sürüyor.
+    az monitor scheduled-query create -n "$1" -g "$KG" \
+      --scopes "$ALAN_ID" \
+      --description "$2" \
+      --condition "$3" \
+      --condition-query sorgu="$4" \
+      --evaluation-frequency "$siklik" --window-size "$pencere" \
+      --severity "$5" --auto-mitigate true \
+      --action-groups "$GRUP_ID" \
+      -o none
   fi
-  echo "▶ Kural oluşturuluyor: $1"
-  # Pencere sıklıktan geniş: logların Log Analytics'e düşmesi birkaç dakika sürüyor.
-  az monitor scheduled-query create -n "$1" -g "$KG" \
-    --scopes "$ALAN_ID" \
-    --description "$2" \
-    --condition "$3" \
-    --condition-query sorgu="$4" \
-    --evaluation-frequency "$siklik" --window-size "$pencere" \
-    --severity "$5" --auto-mitigate true \
-    --action-groups "$GRUP_ID" \
-    -o none
+  kapsam_kontrol "$1"
+}
+
+# Kuralın hangi çalışma alanına baktığını geri okur. Güncelleme komutu kapsamı
+# değiştiremiyor (--scopes yok): kural bir gün yanlış alana kurulursa yeniden
+# çalıştırmak bunu düzeltmez, alarm da hata vermeden hiç çalmaz. Bu yüzden her
+# kuraldan sonra bakıyoruz. Kaynak kimliklerinde büyük-küçük harf farklı
+# gelebildiği için karşılaştırma harf duyarsız.
+kapsam_kontrol() {
+  local kapsam
+  kapsam=$(az monitor scheduled-query show -n "$1" -g "$KG" --query "scopes[0]" -o tsv)
+  if [ "$(echo "$kapsam" | tr '[:upper:]' '[:lower:]')" != "$(echo "$ALAN_ID" | tr '[:upper:]' '[:lower:]')" ]; then
+    echo "HATA: $1 başka bir çalışma alanına bakıyor."
+    echo "  kuralın kapsamı: $kapsam"
+    echo "  ortamın alanı:   $ALAN_ID"
+    echo "  Kapsam güncellemeyle değişmiyor; kuralı silip bu script'i yeniden çalıştır:"
+    echo "    az monitor scheduled-query delete -n $1 -g $KG --yes"
+    exit 1
+  fi
+  echo "  (kapsam doğru: ${ALAN_ID##*/})"
 }
 
 # Sorgu, "TUR_TAMAM 246 otopark kaydedildi ..." satırından sayıyı çekip
