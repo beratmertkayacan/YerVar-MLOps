@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.galeri/
+test-results/
+playwright-report/
+.vite/
